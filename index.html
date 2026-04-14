@@ -379,8 +379,11 @@ function finishThrow(){
     weather:weather?{...weather}:null,
     header:{...hdr}, magSamples:[...rxMag], imuSamples:[...rxImu],
     duration:durS.toFixed(1), peakRPM, peakG:+peakG.toFixed(1),
-    throwType:'',effort:'',flightShape:'',notes:''
+    throwType:'',effort:'',flightShape:'',notes:'',
+    // Computed by analyzeThrow:
+    releaseMs:null,landingMs:null,flightTime:null,estSpeed:null,spinQuality:null
   };
+  analyzeThrow(t);
   throws.push(t);
   hdr=null;rxMag=[];rxImu=[];window._landing=null;
 
@@ -389,9 +392,17 @@ function finishThrow(){
   document.getElementById('sRPM').textContent=peakRPM;
   document.getElementById('sG').textContent=t.peakG+'g';
 
-  const distStr=dist?` ${dist}m`:'';
-  log(`Throw #${t.id}: ${t.duration}s${distStr} ~${peakRPM}RPM ${t.peakG}g`);
+  const parts=[`Throw #${t.id}:`];
+  if(dist)parts.push(dist+'m');
+  if(t.estSpeed)parts.push('~'+t.estSpeed+' m/s');
+  parts.push('~'+peakRPM+' RPM');
+  parts.push(t.peakG+'g');
+  if(t.flightTime)parts.push('flight '+t.flightTime+'s');
+  if(t.spinQuality!=null)parts.push('spin '+t.spinQuality+'%');
+  const summary=parts.join(' | ');
+  log(summary);
   setAction('done');
+  document.getElementById('actionHint').textContent=summary;
   renderThrows();
   drawPlot(t);
 }
@@ -400,6 +411,60 @@ function finishThrow(){
 function fft(s){const N=s.length,m=new Float64Array(N/2);for(let k=0;k<N/2;k++){let re=0,im=0;
   for(let n=0;n<N;n++){const a=-2*Math.PI*k*n/N;re+=s[n]*Math.cos(a);im+=s[n]*Math.sin(a);}
   m[k]=Math.sqrt(re*re+im*im)/N;}return m;}
+
+// ── Throw analysis ─────────────────────────────────────────
+function analyzeThrow(t){
+  const imu=t.imuSamples;if(imu.length<30)return;
+  const imuDt=1000/t.header.imuHz, magDt=1000/t.header.magHz;
+
+  // |accel| in g for each IMU sample
+  const gArr=imu.map(s=>Math.sqrt(s.ax*s.ax+s.ay*s.ay+s.az*s.az)/9.81);
+
+  // Find peak G index (= release moment)
+  let peakIdx=0;
+  for(let i=1;i<gArr.length;i++)if(gArr[i]>gArr[peakIdx])peakIdx=i;
+  if(gArr[peakIdx]<2)return; // no real throw detected
+
+  // Release: after peak, first drop below 2g (entering free flight)
+  let relIdx=peakIdx;
+  for(let i=peakIdx;i<gArr.length;i++){if(gArr[i]<2){relIdx=i;break;}}
+
+  // Landing: after release + min 0.3s, next spike above 2.5g
+  let landIdx=-1;
+  const minFlight=Math.floor(0.3*t.header.imuHz); // 30 samples at 100Hz
+  for(let i=relIdx+minFlight;i<gArr.length-1;i++){
+    if(gArr[i]>2.5&&gArr[i]>gArr[i-1]*1.3){landIdx=i;break;}
+  }
+
+  t.releaseMs=+(relIdx*imuDt).toFixed(0);
+  t.landingMs=landIdx>=0?+(landIdx*imuDt).toFixed(0):null;
+  t.flightTime=t.landingMs!=null?+((t.landingMs-t.releaseMs)/1000).toFixed(2):null;
+
+  // Speed from GPS distance + flight time
+  if(t.distance&&t.flightTime&&t.flightTime>0.1){
+    t.estSpeed=+(t.distance/t.flightTime).toFixed(1); // avg speed in m/s
+  }
+
+  // Spin quality from mag FFT during flight
+  const magStart=Math.floor(t.releaseMs/magDt);
+  const magEnd=t.landingMs?Math.floor(t.landingMs/magDt):t.magSamples.length;
+  const flightMag=t.magSamples.slice(magStart,Math.min(magEnd,magStart+2048));
+  if(flightMag.length>=64){
+    const fN=2**Math.floor(Math.log2(flightMag.length));
+    const sig=flightMag.slice(0,fN).map(s=>s.x);
+    const mean=sig.reduce((a,b)=>a+b,0)/sig.length;
+    const w=sig.map((v,i)=>(v-mean)*0.5*(1-Math.cos(2*Math.PI*i/(sig.length-1))));
+    const mags=fft(w);
+    // Find spin peak (skip DC bin)
+    let spinBin=1,spinVal=0;
+    for(let k=2;k<mags.length-1;k++)if(mags[k]>spinVal){spinVal=mags[k];spinBin=k;}
+    // Energy in spin peak (±2 bins) vs total
+    let peakE=0,totalE=0;
+    for(let k=1;k<mags.length;k++)totalE+=mags[k]*mags[k];
+    for(let k=Math.max(1,spinBin-2);k<=Math.min(mags.length-1,spinBin+2);k++)peakE+=mags[k]*mags[k];
+    t.spinQuality=totalE>0?Math.round(peakE/totalE*100):0;
+  }
+}
 
 // ── Geo utils ──────────────────────────────────────────────
 function haversine(a,b,c,d){
@@ -421,8 +486,12 @@ function renderThrows(){
   if(!throws.length)return;
   el.innerHTML=throws.map((t,i)=>{
     const d=t.distance?`${t.distance}m`:'--';
+    const spd=t.estSpeed?`${t.estSpeed}m/s`:'';
+    const fl=t.flightTime?`fly${t.flightTime}s`:'';
+    const sq=t.spinQuality!=null?`spin${t.spinQuality}%`:'';
+    const parts=[d,`${t.peakRPM}RPM`,`${t.peakG}g`,spd,fl,sq].filter(Boolean).join(' | ');
     return`<div class="ti">
-      <div class="hd"><strong>#${t.id}</strong> <span>${d} | ~${t.peakRPM}RPM | ${t.peakG}g | ${t.duration}s</span>
+      <div class="hd"><strong>#${t.id}</strong> <span style="font-size:0.75rem">${parts}</span>
         <button style="font-size:0.65rem;padding:0.1rem 0.3rem;background:var(--bd);color:var(--mt);border:none;border-radius:3px"
           onclick="drawPlot(throws[${i}])">Plot</button></div>
       <div class="tags"><span style="color:var(--mt);font-size:0.65rem">Type</span>
@@ -453,6 +522,8 @@ async function exportSession(){
       weather:t.weather?{temperature_c:t.weather.temp,wind_speed_ms:t.weather.wind,
         wind_direction_deg:t.weather.windDir,wind_gust_ms:t.weather.gust,
         station:t.weather.station,station_distance_m:t.weather.stationDist}:null,
+      analysis:{flight_time_s:t.flightTime,release_ms:t.releaseMs,landing_ms:t.landingMs,
+        est_speed_ms:t.estSpeed,spin_quality_pct:t.spinQuality},
       sensor:{mag_rate_hz:t.header.magHz,imu_rate_hz:t.header.imuHz,peak_rpm:t.peakRPM,peak_g:t.peakG,
         mag:t.magSamples.map(s=>({t:+s.t.toFixed(1),x:+s.x.toFixed(2),y:+s.y.toFixed(2),z:+s.z.toFixed(2)})),
         imu:t.imuSamples.map(s=>({t:+s.t.toFixed(1),ax:+s.ax.toFixed(3),ay:+s.ay.toFixed(3),az:+s.az.toFixed(3),
@@ -519,9 +590,23 @@ function drawPlot(t){
       i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}ctx.stroke();}
   ctx.font=`bold ${10*dp}px monospace`;
   for(let a=0;a<3;a++){ctx.fillStyle=cols[a];ctx.fillText(l[a],W-75*dp+a*24*dp,13*dp);}
+  // Release & landing markers
+  if(t.releaseMs!=null&&tEnd>0){
+    const rx=(t.releaseMs/tEnd)*W;
+    ctx.strokeStyle='#d29922';ctx.lineWidth=2*dp;ctx.setLineDash([4*dp,4*dp]);
+    ctx.beginPath();ctx.moveTo(rx,0);ctx.lineTo(rx,H);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='#d29922';ctx.font=`${9*dp}px sans-serif`;ctx.fillText('RELEASE',rx+3,H-16*dp);
+  }
+  if(t.landingMs!=null&&tEnd>0){
+    const lx=(t.landingMs/tEnd)*W;
+    ctx.strokeStyle='#f85149';ctx.lineWidth=2*dp;ctx.setLineDash([4*dp,4*dp]);
+    ctx.beginPath();ctx.moveTo(lx,0);ctx.lineTo(lx,H);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='#f85149';ctx.font=`${9*dp}px sans-serif`;ctx.fillText('LAND',lx+3,H-16*dp);
+  }
   const dStr=t.distance?` ${t.distance}m`:'';
+  const sqStr=t.spinQuality!=null?' spin'+t.spinQuality+'%':'';
   ctx.fillStyle='#e6edf3';ctx.font=`bold ${10*dp}px sans-serif`;
-  ctx.fillText(`#${t.id}${dStr} ~${t.peakRPM}RPM ${t.peakG}g [${u}]`,4,13*dp);
+  ctx.fillText(`#${t.id}${dStr} ~${t.peakRPM}RPM ${t.peakG}g${sqStr} [${u}]`,4,13*dp);
 }
 
 // ── Live render during dump ────────────────────────────────
