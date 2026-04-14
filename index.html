@@ -478,25 +478,22 @@ function analyzeThrow(t){
   const imu=t.imuSamples,mag=t.magSamples;
   if(imu.length<20||mag.length<50)return;
   const iDt=1000/t.header.imuHz,mDt=1000/t.header.magHz;
-  // Per-axis max: use the highest absolute value across all 3 accel axes per sample
-  // (catches throws where only one axis spikes)
-  const peakA=imu.map(s=>Math.max(Math.abs(s.ax),Math.abs(s.ay),Math.abs(s.az))/9.81);
+  // ── Find flight via gyro saturation ──
+  // Auto-detect spin axis (whichever gyro axis has the highest sustained value)
+  let gxM=0,gyM=0,gzM=0;
+  for(const s of imu){const ax=Math.abs(s.gx),ay=Math.abs(s.gy),az=Math.abs(s.gz);
+    if(ax>gxM)gxM=ax;if(ay>gyM)gyM=ay;if(az>gzM)gzM=az;}
+  const spinVals=gzM>=gyM&&gzM>=gxM?imu.map(s=>Math.abs(s.gz)):
+    gyM>=gxM?imu.map(s=>Math.abs(s.gy)):imu.map(s=>Math.abs(s.gx));
 
-  // ── Find two biggest peaks at least 0.5s apart ──
-  let p1=0;
-  for(let i=1;i<peakA.length;i++)if(peakA[i]>peakA[p1])p1=i;
+  // Flight = where spin axis gyro exceeds threshold (disc spinning fast)
+  const SPIN_THRESH=20; // rad/s (~1150 dps) - well above hand movement, catches even slow throws
+  let relIdx=-1,landIdx=-1;
+  for(let i=0;i<spinVals.length;i++){if(spinVals[i]>SPIN_THRESH){relIdx=i;break;}}
+  for(let i=spinVals.length-1;i>=0;i--){if(spinVals[i]>SPIN_THRESH){landIdx=i;break;}}
 
-  const minSep=Math.floor(0.15*t.header.imuHz); // 150ms min - supports very short indoor throws
-  let p2=-1,p2v=0;
-  for(let i=0;i<peakA.length;i++){
-    if(Math.abs(i-p1)>=minSep&&peakA[i]>p2v){p2v=peakA[i];p2=i;}
-  }
-
-  // Second peak must be above 2g to count
-  if(p2<0||p2v<2)p2=-1;
-  let relIdx,landIdx;
-  if(p2>=0){relIdx=Math.min(p1,p2);landIdx=Math.max(p1,p2);}
-  else{relIdx=p1;landIdx=-1;}
+  // Need at least 100ms of flight
+  if(relIdx<0||landIdx<0||landIdx-relIdx<Math.floor(0.1*t.header.imuHz)){relIdx=0;landIdx=-1;}
 
   t.releaseMs=+(relIdx*iDt).toFixed(0);
   t.landingMs=landIdx>=0?+(landIdx*iDt).toFixed(0):null;
