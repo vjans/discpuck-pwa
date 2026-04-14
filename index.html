@@ -218,7 +218,7 @@ let collector=localStorage.getItem('dp_name')||'';
 let cal=null;try{cal=JSON.parse(localStorage.getItem('dp_cal'));}catch(e){}
 let tee=null,pos=null,wx=null;
 let throws=[],plotMode='mag',lastThrow=null;
-let hdr=null,rxMag=[],rxImu=[],calibrating=false;
+let hdr=null,rxMag=[],rxImu=[],calibrating=false,lastDataTs=0;
 let syncQueue=JSON.parse(localStorage.getItem('dp_queue')||'[]');
 
 // ═══════════════════════════════════════════════════════════
@@ -307,18 +307,25 @@ function onData(e){
   const b=e.target.value,len=b.byteLength;
   if(len===20&&!hdr){
     hdr={magN:b.getUint16(0,true),imuN:b.getUint16(2,true),magHz:b.getUint16(4,true),imuHz:b.getUint16(6,true)};
-    rxMag=[];rxImu=[];setPhase('recv');return;
+    rxMag=[];rxImu=[];lastDataTs=Date.now();setPhase('recv');return;
   }
   if(len===18||len===6){const n=len/6;for(let i=0;i<n;i++)rxMag.push({
     x:b.getInt16(i*6,true)/10,y:b.getInt16(i*6+2,true)/10,z:b.getInt16(i*6+4,true)/10});}
   else if(len===12){rxImu.push({ax:b.getInt16(0,true)/100,ay:b.getInt16(2,true)/100,
     az:b.getInt16(4,true)/100,gx:b.getInt16(6,true)/100,gy:b.getInt16(8,true)/100,gz:b.getInt16(10,true)/100});}
-  if(hdr){const p=Math.floor((rxMag.length+rxImu.length)/(hdr.magN+hdr.imuN)*100);
-    document.getElementById('actBtn').textContent='RECEIVING '+p+'%';}
+  if(hdr){
+    lastDataTs=Date.now();
+    const p=Math.floor((rxMag.length+rxImu.length)/(hdr.magN+hdr.imuN)*100);
+    document.getElementById('actBtn').textContent='RECEIVING '+Math.min(p,100)+'%';
+    // Auto-complete when all expected data received (don't wait for DONE status)
+    if(rxMag.length>=hdr.magN&&rxImu.length>=hdr.imuN){
+      if(calibrating)finishCal();else finishThrow();
+    }
+  }
 }
 function onStat(e){
   const b=e.target.value;if(b.byteLength<5)return;
-  if(b.getUint8(0)===3){if(calibrating)finishCal();else finishThrow();}
+  if(b.getUint8(0)===3&&hdr){if(calibrating)finishCal();else finishThrow();}
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -370,8 +377,9 @@ function startCal(){
   }).catch(e=>{calibrating=false;alert('Cal fail: '+e.message);});
 }
 function finishCal(){
+  if(!hdr){calibrating=false;return;} // already processed
   calibrating=false;
-  if(rxImu.length<10){alert('Calibration failed: '+rxImu.length+' samples');setPhase('ready');return;}
+  if(rxImu.length<10){alert('Calibration failed: '+rxImu.length+' samples');hdr=null;setPhase('ready');return;}
   let sx=0,sy=0,sz=0;for(const s of rxImu){sx+=s.ax;sy+=s.ay;sz+=s.az;}
   const n=rxImu.length;
   cal={gx:sx/n,gy:sy/n,gz:sz/n,date:new Date().toISOString()};
@@ -393,7 +401,8 @@ function renderCal(){
 // FINISH THROW
 // ═══════════════════════════════════════════════════════════
 function finishThrow(){
-  if(!hdr||rxMag.length<10){setPhase('ready');return;}
+  if(!hdr)return; // already processed or nothing to process
+  if(rxMag.length<10){hdr=null;setPhase('ready');return;}
   const mDt=1000/hdr.magHz,iDt=1000/hdr.imuHz;
   for(let i=0;i<rxMag.length;i++)rxMag[i].t=i*mDt;
   for(let i=0;i<rxImu.length;i++)rxImu[i].t=i*iDt;
@@ -638,6 +647,11 @@ function drawPlot(t){
 
 // Live render
 function renderLoop(){
+  // Stall detection: if no data for 3s but we have some, finish with what we have
+  if(hdr&&lastDataTs>0&&Date.now()-lastDataTs>3000&&rxMag.length>10){
+    log('Dump stalled at '+rxMag.length+'mag+'+rxImu.length+'imu, finishing');
+    if(calibrating)finishCal();else finishThrow();
+  }
   if(hdr&&(rxMag.length>2||rxImu.length>2)){
     let d,gv;
     if(plotMode==='acc'&&rxImu.length>2){d=rxImu;gv=s=>[s.ax,s.ay,s.az];}
