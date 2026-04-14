@@ -486,7 +486,7 @@ function analyzeThrow(t){
   let p1=0;
   for(let i=1;i<peakA.length;i++)if(peakA[i]>peakA[p1])p1=i;
 
-  const minSep=Math.floor(0.5*t.header.imuHz);
+  const minSep=Math.floor(0.15*t.header.imuHz); // 150ms min - supports very short indoor throws
   let p2=-1,p2v=0;
   for(let i=0;i<peakA.length;i++){
     if(Math.abs(i-p1)>=minSep&&peakA[i]>p2v){p2v=peakA[i];p2=i;}
