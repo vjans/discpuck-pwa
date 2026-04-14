@@ -204,7 +204,7 @@ canvas{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);wi
 // ═══════════════════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════════════════
-const BUILD='de3c43b | spin axis by sum not peak';
+const BUILD='2b23590 | FFT min=8, full DFT, logging';
 const SUPA_URL='https://fjptyllozsmlhxpahocd.supabase.co';
 const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqcHR5bGxvenNtbGh4cGFob2NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzA1NjMsImV4cCI6MjA5MTc0NjU2M30.Zx3kn4TBpGFjDfSeNgUHq86FAaNtNNFV-1F1g9b0Ynk';
 const BLE_SVC='19b10000-e8f2-537e-4f6c-d104768a1214';
@@ -427,20 +427,22 @@ function finishThrow(){
 
   analyzeThrow(t);
 
-  // FFT on flight segment only — clamp to actual data bounds (BLE stall may truncate)
+  // FFT on flight segment — clamp to actual data, use all available samples
   const mDt2=1000/t.header.magHz;
-  const fftStart=Math.min(t.releaseMs!=null?Math.floor(t.releaseMs/mDt2):0, t.magSamples.length-1);
-  const fftEnd=Math.min(t.landingMs!=null?Math.floor(t.landingMs/mDt2):t.magSamples.length, t.magSamples.length);
-  const flightMag=t.magSamples.slice(Math.max(0,fftStart),fftEnd);
-  if(flightMag.length>=64){
-    const fN=Math.min(1024,2**Math.floor(Math.log2(flightMag.length)));
-    const sr=t.header.magHz,sig=flightMag.slice(0,fN).map(s=>s.x);
+  const fftStart=Math.min(Math.max(0,t.releaseMs!=null?Math.floor(t.releaseMs/mDt2):0),t.magSamples.length-1);
+  const fftEnd=Math.min(t.landingMs!=null?Math.floor(t.landingMs/mDt2):t.magSamples.length,t.magSamples.length);
+  const flightMag=t.magSamples.slice(fftStart,fftEnd);
+  log('FFT window: mag['+fftStart+':'+fftEnd+'] = '+flightMag.length+' samples (need 8+)');
+  if(flightMag.length>=8){
+    const fN=flightMag.length; // use ALL samples, not just power-of-2
+    const sr=t.header.magHz,sig=flightMag.map(s=>s.x);
     const mn=sig.reduce((a,b)=>a+b,0)/sig.length;
     const h=sig.map((v,i)=>(v-mn)*.5*(1-Math.cos(2*Math.PI*i/(sig.length-1))));
     const m=fft(h),fR=sr/fN;let pB=1,pM=0;
     for(let k=Math.max(1,Math.floor(.5/fR));k<Math.min(m.length-1,Math.floor(sr/2/fR));k++)if(m[k]>pM){pM=m[k];pB=k;}
     t.peakRPM=Math.round(pB*fR*60);
-  }
+    log('FFT: bin='+pB+' fRes='+fR.toFixed(1)+'Hz RPM='+t.peakRPM);
+  }else{log('FFT skipped: only '+flightMag.length+' mag samples in flight window');}
 
   throws.push(t);lastThrow=t;
   rxMag=[];rxImu=[];window._land=null;
