@@ -204,7 +204,7 @@ canvas{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);wi
 // ═══════════════════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════════════════
-const BUILD='9510727b | clamp FFT to actual data';
+const BUILD='de3c43b | spin axis by sum not peak';
 const SUPA_URL='https://fjptyllozsmlhxpahocd.supabase.co';
 const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqcHR5bGxvenNtbGh4cGFob2NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzA1NjMsImV4cCI6MjA5MTc0NjU2M30.Zx3kn4TBpGFjDfSeNgUHq86FAaNtNNFV-1F1g9b0Ynk';
 const BLE_SVC='19b10000-e8f2-537e-4f6c-d104768a1214';
@@ -481,13 +481,12 @@ function analyzeThrow(t){
   if(imu.length<20||mag.length<50)return;
   const iDt=1000/t.header.imuHz,mDt=1000/t.header.magHz;
   // ── Find flight via gyro spin-up / spin-down ──
-  // Auto-detect spin axis (whichever gyro axis has the highest peak)
-  let gxM=0,gyM=0,gzM=0;
-  for(const s of imu){const ax=Math.abs(s.gx),ay=Math.abs(s.gy),az=Math.abs(s.gz);
-    if(ax>gxM)gxM=ax;if(ay>gyM)gyM=ay;if(az>gzM)gzM=az;}
-  const spinVals=gzM>=gyM&&gzM>=gxM?imu.map(s=>Math.abs(s.gz)):
-    gyM>=gxM?imu.map(s=>Math.abs(s.gy)):imu.map(s=>Math.abs(s.gx));
-  const spinMax=Math.max(gxM,gyM,gzM);
+  // Auto-detect spin axis by highest TOTAL SUM (sustained spin, not brief spikes)
+  let gxS=0,gyS=0,gzS=0;
+  for(const s of imu){gxS+=Math.abs(s.gx);gyS+=Math.abs(s.gy);gzS+=Math.abs(s.gz);}
+  const spinKey=gzS>=gyS&&gzS>=gxS?'gz':gyS>=gxS?'gy':'gx';
+  const spinVals=imu.map(s=>Math.abs(s[spinKey]));
+  let spinMax=0;for(const v of spinVals)if(v>spinMax)spinMax=v;
 
   // Adaptive threshold: 40% of peak spin rate (works for gentle and hard throws)
   const SPIN_THRESH=Math.max(spinMax*0.4, 3); // minimum 3 rad/s to avoid noise
