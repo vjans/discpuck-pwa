@@ -401,22 +401,24 @@ function renderCal(){
 // FINISH THROW
 // ═══════════════════════════════════════════════════════════
 function finishThrow(){
-  if(!hdr)return; // already processed or nothing to process
-  if(rxMag.length<10){hdr=null;setPhase('ready');return;}
-  const mDt=1000/hdr.magHz,iDt=1000/hdr.imuHz;
+  if(!hdr)return;
+  const savedHdr={...hdr};hdr=null; // null immediately to prevent re-entry
+  if(rxMag.length<10){setPhase('ready');return;}
+  try{
+  const mDt=1000/savedHdr.magHz,iDt=1000/savedHdr.imuHz;
   for(let i=0;i<rxMag.length;i++)rxMag[i].t=i*mDt;
   for(let i=0;i<rxImu.length;i++)rxImu[i].t=i*iDt;
 
-  let rpm=0; // computed after analyzeThrow using flight segment
+  let rpm=0;
   let peakG=0;for(const s of rxImu){const g=Math.sqrt(s.ax*s.ax+s.ay*s.ay+s.az*s.az)/9.81;if(g>peakG)peakG=g;}
   const land=window._land||null;
   let dist=null,bear=null;
   if(tee&&land){dist=+haversine(tee.lat,tee.lon,land.lat,land.lon).toFixed(1);bear=+bearing(tee.lat,tee.lon,land.lat,land.lon).toFixed(0);}
-  const dur=N>0?((N-1)*mDt/1000):0;
+  const dur=rxMag.length>0?((rxMag.length-1)*mDt/1000):0;
 
   const t={id:throws.length+1,time:new Date().toISOString(),collector,disc:document.getElementById('sDisc').value,
     tee:tee?{...tee}:null,landing:land,distance:dist,bearing:bear,wx:wx?{...wx}:null,
-    header:{...hdr},magSamples:[...rxMag],imuSamples:[...rxImu],
+    header:{...savedHdr},magSamples:[...rxMag],imuSamples:[...rxImu],
     duration:+dur.toFixed(1),peakRPM:rpm,peakG:+peakG.toFixed(1),
     releaseMs:null,landingMs:null,flightTime:null,estSpeed:null,spinQuality:null,hyzerAngle:null,noseAngle:null,
     throwType:'',effort:'',notes:'',synced:false};
@@ -439,10 +441,11 @@ function finishThrow(){
   }
 
   throws.push(t);lastThrow=t;
-  hdr=null;rxMag=[];rxImu=[];window._land=null;
+  rxMag=[];rxImu=[];window._land=null;
   updateMetrics(t);setPhase('done');renderHist();drawPlot(t);
   syncThrow(t);
-  log('#'+t.id+': '+(dist?dist+'m ':'')+rpm+'RPM '+t.peakG+'g'+(t.flightTime?' '+t.flightTime+'s':''));
+  log('#'+t.id+': '+(dist?dist+'m ':'')+(t.peakRPM||0)+'RPM '+t.peakG+'g'+(t.flightTime?' '+t.flightTime+'s':''));
+  }catch(e){log('Error processing throw: '+e.message);console.error(e);setPhase('ready');}
 }
 
 function updateMetrics(t){
