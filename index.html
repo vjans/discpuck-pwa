@@ -218,7 +218,7 @@ let collector=localStorage.getItem('dp_name')||'';
 let cal=null;try{cal=JSON.parse(localStorage.getItem('dp_cal'));}catch(e){}
 let tee=null,pos=null,wx=null;
 let throws=[],plotMode='mag',lastThrow=null;
-let hdr=null,rxMag=[],rxImu=[],calibrating=false,lastDataTs=0;
+let hdr=null,rxMag=[],rxImu=[],calibrating=false,lastDataTs=0,dumpStartTs=0;
 let syncQueue=JSON.parse(localStorage.getItem('dp_queue')||'[]');
 
 // ═══════════════════════════════════════════════════════════
@@ -307,7 +307,7 @@ function onData(e){
   const b=e.target.value,len=b.byteLength;
   if(len===20&&!hdr){
     hdr={magN:b.getUint16(0,true),imuN:b.getUint16(2,true),magHz:b.getUint16(4,true),imuHz:b.getUint16(6,true)};
-    rxMag=[];rxImu=[];lastDataTs=Date.now();setPhase('recv');return;
+    rxMag=[];rxImu=[];lastDataTs=Date.now();dumpStartTs=Date.now();setPhase('recv');return;
   }
   if(len===18||len===6){const n=len/6;for(let i=0;i<n;i++)rxMag.push({
     x:b.getInt16(i*6,true)/10,y:b.getInt16(i*6+2,true)/10,z:b.getInt16(i*6+4,true)/10});}
@@ -657,10 +657,15 @@ function drawPlot(t){
 
 // Live render
 function renderLoop(){
-  // Stall detection: if no data for 3s but we have some, finish with what we have
-  if(hdr&&lastDataTs>0&&Date.now()-lastDataTs>3000&&rxMag.length>10){
-    log('Dump stalled at '+rxMag.length+'mag+'+rxImu.length+'imu, finishing');
-    if(calibrating)finishCal();else finishThrow();
+  // Completion detection: stall (1.5s no data) OR hard timeout (15s total)
+  if(hdr&&rxMag.length>10){
+    const stalled=lastDataTs>0&&Date.now()-lastDataTs>1500;
+    const timeout=dumpStartTs>0&&Date.now()-dumpStartTs>15000;
+    if(stalled||timeout){
+      const pct=Math.floor((rxMag.length+rxImu.length)/(hdr.magN+hdr.imuN)*100);
+      log('Dump '+(stalled?'stalled':'timeout')+' at '+pct+'% ('+rxMag.length+'mag+'+rxImu.length+'imu), finishing');
+      if(calibrating)finishCal();else finishThrow();
+    }
   }
   if(hdr&&(rxMag.length>2||rxImu.length>2)){
     let d,gv;
