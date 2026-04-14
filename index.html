@@ -8,773 +8,677 @@
 <link rel="manifest" href="manifest.json">
 <title>DiscPuck</title>
 <style>
-:root{--bg:#0d1117;--sf:#161b22;--bd:#30363d;--tx:#e6edf3;--mt:#8b949e;
-  --gn:#3fb950;--bl:#58a6ff;--or:#d29922;--rd:#f85149;--pr:#bc8cff;--cy:#39d2c0;}
-*{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--tx);
-  padding:env(safe-area-inset-top) 0.5rem 0.5rem;font-size:14px;min-height:100vh;
-  -webkit-user-select:none;user-select:none;}
-.bar{background:var(--sf);border:1px solid var(--bd);border-radius:6px;padding:0.4rem 0.6rem;margin-bottom:0.4rem;font-size:0.8rem;}
-.bar .label{color:var(--mt);font-size:0.65rem;text-transform:uppercase;}
-.bar .val{font-family:monospace;font-weight:600;}
-.bar .sub{color:var(--mt);font-size:0.7rem;}
-.action{text-align:center;padding:0.75rem 0;margin-bottom:0.4rem;}
-.action button{font-size:1.3rem;padding:1rem 2.5rem;border-radius:12px;border:none;font-weight:800;
-  cursor:pointer;width:100%;max-width:400px;transition:all 0.15s;}
-.action button:active{transform:scale(0.97);}
-.btn-connect{background:var(--bl);color:#000;}
-.btn-throw{background:var(--pr);color:#000;}
-.btn-landed{background:var(--gn);color:#000;}
-.btn-dumping{background:var(--bd);color:var(--gn);animation:pulse 0.5s infinite alternate;}
-.btn-next{background:var(--bl);color:#000;}
-.btn-tee{background:var(--or);color:#000;font-size:1rem!important;padding:0.7rem 1.5rem!important;}
-@keyframes pulse{from{opacity:0.7}to{opacity:1}}
-.info{display:flex;justify-content:space-around;margin-bottom:0.4rem;}
-.info .stat{text-align:center;}
-.info .stat .v{font-size:1.2rem;font-weight:700;font-family:monospace;}
-.info .stat .l{font-size:0.6rem;color:var(--mt);text-transform:uppercase;}
-canvas{background:var(--sf);border:1px solid var(--bd);border-radius:6px;width:100%;display:block;margin-bottom:0.4rem;}
-.plot-toggle{text-align:center;margin-bottom:0.3rem;}
-.plot-toggle button{padding:0.2rem 0.6rem;font-size:0.75rem;background:var(--bd);color:var(--mt);
-  border:none;border-radius:4px;margin:0 0.1rem;cursor:pointer;font-weight:600;}
-.plot-toggle button.sel{background:var(--bl);color:#000;}
-.throws{max-height:300px;overflow-y:auto;}
-.ti{background:var(--sf);border:1px solid var(--bd);border-radius:6px;padding:0.4rem;margin-bottom:0.3rem;}
-.ti .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:0.2rem;}
-.ti .hd strong{color:var(--or);}
-.ti .tags{display:flex;flex-wrap:wrap;gap:0.2rem;margin-top:0.2rem;}
-.ti .tags button{font-size:0.65rem;padding:0.1rem 0.35rem;background:var(--bd);color:var(--mt);
-  border:none;border-radius:3px;cursor:pointer;}
-.ti .tags button.sel{background:var(--bl);color:#000;}
-.btns{display:flex;gap:0.3rem;flex-wrap:wrap;margin-top:0.4rem;}
-.btns button{flex:1;min-width:100px;padding:0.4rem;font-size:0.8rem;border:none;border-radius:5px;
-  cursor:pointer;font-weight:600;}
-.log{background:var(--sf);border:1px solid var(--bd);border-radius:5px;padding:0.3rem;
-  font-family:monospace;font-size:0.65rem;max-height:70px;overflow-y:auto;color:var(--mt);margin-top:0.4rem;}
-details summary{color:var(--bl);font-weight:600;font-size:0.85rem;cursor:pointer;margin-bottom:0.3rem;}
-.form-row{display:flex;gap:0.3rem;align-items:center;margin-top:0.3rem;}
-.form-row label{color:var(--mt);font-size:0.75rem;min-width:50px;}
-.form-row input{background:var(--bg);border:1px solid var(--bd);color:var(--tx);padding:0.25rem 0.4rem;
-  border-radius:4px;font-size:0.8rem;flex:1;max-width:200px;}
+:root{--bg:#0a0e14;--sf:#12181f;--cd:#1a2230;--bd:#2a3444;--tx:#e2e8f0;--mt:#64748b;
+  --gn:#22c55e;--bl:#3b82f6;--or:#f59e0b;--rd:#ef4444;--pr:#a855f7;--cy:#06b6d4;
+  --r:10px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,system-ui,'Segoe UI',sans-serif;background:var(--bg);color:var(--tx);
+  padding:env(safe-area-inset-top,.5rem) .5rem .5rem;min-height:100dvh;
+  -webkit-user-select:none;user-select:none;overflow-x:hidden}
+
+/* Header */
+.hdr{display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;margin-bottom:.3rem}
+.hdr h1{font-size:1.1rem;font-weight:800;background:linear-gradient(135deg,var(--bl),var(--pr));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:.3rem}
+.dot.on{background:var(--gn);box-shadow:0 0 6px var(--gn)}.dot.off{background:var(--rd)}
+.hdr-right{font-size:.75rem;color:var(--mt);display:flex;align-items:center;gap:.3rem}
+
+/* Weather bar */
+.wx{background:var(--sf);border-radius:var(--r);padding:.5rem .6rem;margin-bottom:.4rem;display:flex;
+  justify-content:space-between;align-items:center;font-size:.8rem;border:1px solid var(--bd)}
+.wx .temp{font-size:1.1rem;font-weight:700}.wx .wind{color:var(--cy);font-weight:600}
+.wx .station{color:var(--mt);font-size:.65rem}
+
+/* Action button */
+.act{text-align:center;padding:.6rem 0;margin-bottom:.4rem}
+.act button{font-size:1.4rem;padding:1.1rem 2rem;border-radius:16px;border:none;font-weight:800;
+  cursor:pointer;width:100%;max-width:400px;transition:all .15s;letter-spacing:.5px;
+  box-shadow:0 4px 15px rgba(0,0,0,.3)}
+.act button:active{transform:scale(.96);box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.btn-connect{background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff}
+.btn-throw{background:linear-gradient(135deg,#a855f7,#7c3aed);color:#fff;animation:glow 2s ease-in-out infinite}
+.btn-landed{background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff}
+.btn-recv{background:var(--cd);color:var(--gn);border:2px solid var(--gn)!important;animation:pulse .5s infinite alternate}
+.btn-next{background:linear-gradient(135deg,#3b82f6,#06b6d4);color:#fff}
+@keyframes glow{0%,100%{box-shadow:0 4px 15px rgba(168,85,247,.3)}50%{box-shadow:0 4px 25px rgba(168,85,247,.6)}}
+@keyframes pulse{from{opacity:.6}to{opacity:1}}
+.hint{margin-top:.4rem;font-size:.75rem;color:var(--mt)}
+.tee-info{font-size:.7rem;color:var(--mt);margin-top:.2rem}
+
+/* Metrics grid */
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:.35rem;margin-bottom:.4rem}
+.mc{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:.5rem .3rem;
+  text-align:center;transition:all .3s}
+.mc.flash{animation:flashIn .4s ease-out}
+@keyframes flashIn{from{transform:scale(1.1);opacity:0}to{transform:scale(1);opacity:1}}
+.mc .v{font-size:1.3rem;font-weight:800;font-family:'SF Mono',ui-monospace,monospace;line-height:1.2}
+.mc .u{font-size:.6rem;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-top:.1rem}
+
+/* Quick labels */
+.labels{display:flex;flex-wrap:wrap;gap:.25rem;margin-bottom:.4rem;justify-content:center}
+.labels .group{display:flex;gap:.15rem;align-items:center}
+.labels .gl{font-size:.6rem;color:var(--mt);margin-right:.15rem;text-transform:uppercase}
+.chip{font-size:.7rem;padding:.2rem .5rem;background:var(--cd);color:var(--mt);border:1px solid var(--bd);
+  border-radius:6px;cursor:pointer;font-weight:600;transition:all .15s}
+.chip.on{background:var(--bl);color:#fff;border-color:var(--bl)}
+.chip:active{transform:scale(.95)}
+
+/* Plot */
+.plot-bar{display:flex;justify-content:center;gap:.2rem;margin-bottom:.2rem}
+.plot-bar button{font-size:.7rem;padding:.15rem .5rem;background:var(--cd);color:var(--mt);
+  border:1px solid var(--bd);border-radius:5px;cursor:pointer;font-weight:600}
+.plot-bar button.on{background:var(--bl);color:#fff;border-color:var(--bl)}
+canvas{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);width:100%;display:block;margin-bottom:.4rem}
+
+/* History */
+.hist-title{font-size:.85rem;font-weight:700;color:var(--mt);margin-bottom:.3rem;display:flex;justify-content:space-between}
+.hist{max-height:250px;overflow-y:auto}
+.hi{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:.4rem .5rem;margin-bottom:.25rem;
+  display:flex;justify-content:space-between;align-items:center;font-size:.8rem;cursor:pointer;transition:background .15s}
+.hi:active{background:var(--cd)}
+.hi .num{color:var(--or);font-weight:800;min-width:24px}
+.hi .det{flex:1;margin-left:.4rem;color:var(--mt)}
+.hi .det strong{color:var(--tx)}
+.hi .sync{font-size:.7rem}
+.sync-ok{color:var(--gn)}.sync-wait{color:var(--or)}.sync-fail{color:var(--rd)}
+
+/* Bottom bar */
+.bottom{display:flex;gap:.3rem;margin-top:.3rem}
+.bottom button{flex:1;padding:.5rem;font-size:.8rem;border:none;border-radius:8px;cursor:pointer;font-weight:700}
+
+/* Settings */
+.panel{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:.5rem;margin-top:.3rem}
+.panel summary{font-size:.8rem;font-weight:700;color:var(--bl);cursor:pointer}
+.fi{display:flex;align-items:center;gap:.3rem;margin-top:.3rem}
+.fi label{color:var(--mt);font-size:.75rem;min-width:55px}
+.fi input{background:var(--bg);border:1px solid var(--bd);color:var(--tx);padding:.25rem .4rem;
+  border-radius:5px;font-size:.8rem;flex:1;max-width:200px}
+
+/* Log */
+.log{background:var(--sf);border:1px solid var(--bd);border-radius:6px;padding:.3rem;
+  font-family:monospace;font-size:.6rem;max-height:60px;overflow-y:auto;color:var(--mt);margin-top:.3rem}
+
+/* Onboarding */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;
+  justify-content:center;z-index:100;padding:1rem}
+.obox{background:var(--sf);border-radius:16px;padding:1.5rem;max-width:360px;width:100%;text-align:center}
+.obox h2{font-size:1.2rem;margin-bottom:.5rem}
+.obox p{font-size:.85rem;color:var(--mt);margin-bottom:1rem;line-height:1.4}
+.obox input{width:100%;padding:.5rem;background:var(--bg);border:1px solid var(--bd);color:var(--tx);
+  border-radius:8px;font-size:1rem;text-align:center;margin-bottom:.8rem}
+.obox button{padding:.6rem 2rem;font-size:1rem;border:none;border-radius:10px;font-weight:700;cursor:pointer;
+  background:linear-gradient(135deg,var(--bl),var(--pr));color:#fff}
 </style>
 </head>
 <body>
 
-<!-- GPS -->
-<div class="bar" id="gpsBar">
-  <span class="label">GPS</span>
-  <span class="val" id="gpsVal">Acquiring...</span>
-  <span class="sub" id="gpsSub"></span>
+<!-- Onboarding -->
+<div class="overlay" id="onboard" style="display:none">
+  <div class="obox">
+    <h2>Welcome to DiscPuck</h2>
+    <p>Enter your name to start collecting throw data. This identifies your throws in the shared database.</p>
+    <input type="text" id="obName" placeholder="Your name" autocomplete="name">
+    <br>
+    <button onclick="finishOnboard()">Start Collecting</button>
+  </div>
+</div>
+
+<!-- Header -->
+<div class="hdr">
+  <h1>DiscPuck</h1>
+  <div class="hdr-right"><span class="dot off" id="bleDot"></span><span id="bleLabel">Disconnected</span></div>
 </div>
 
 <!-- Weather -->
-<div class="bar" id="wxBar">
-  <span class="label">Weather</span>
-  <span class="val" id="wxVal">--</span>
-  <span class="sub" id="wxSub"></span>
+<div class="wx" id="wxBar">
+  <div><span class="temp" id="wxTemp">--</span> <span class="wind" id="wxWind"></span></div>
+  <div class="station" id="wxStation">No weather data</div>
 </div>
 
-<!-- Main Action -->
-<div class="action" id="actionArea">
-  <button class="btn-connect" id="actionBtn" onclick="doAction()">CONNECT</button>
-  <div style="margin-top:0.3rem;font-size:0.8rem;color:var(--mt)" id="actionHint">Pair with DiscPuck to start</div>
+<!-- Action -->
+<div class="act">
+  <button class="btn-connect" id="actBtn" onclick="doAction()">CONNECT</button>
+  <div class="hint" id="actHint">Pair with your DiscPuck sensor</div>
+  <div class="tee-info" id="teeInfo"></div>
 </div>
 
-<!-- Stats -->
-<div class="info">
-  <div class="stat"><div class="v" id="sThrows">0</div><div class="l">Throws</div></div>
-  <div class="stat"><div class="v" id="sDist">--</div><div class="l">Last Dist</div></div>
-  <div class="stat"><div class="v" id="sRPM">--</div><div class="l">RPM</div></div>
-  <div class="stat"><div class="v" id="sG">--</div><div class="l">Peak G</div></div>
+<!-- Metrics -->
+<div class="metrics" id="metricsGrid">
+  <div class="mc"><div class="v" id="mDist" style="color:var(--or)">--</div><div class="u">Distance</div></div>
+  <div class="mc"><div class="v" id="mRPM" style="color:var(--pr)">--</div><div class="u">RPM</div></div>
+  <div class="mc"><div class="v" id="mG" style="color:var(--rd)">--</div><div class="u">Peak G</div></div>
+  <div class="mc"><div class="v" id="mSpd" style="color:var(--cy)">--</div><div class="u">Speed</div></div>
+  <div class="mc"><div class="v" id="mHyz" style="color:var(--gn)">--</div><div class="u">Hyzer</div></div>
+  <div class="mc"><div class="v" id="mNose" style="color:var(--bl)">--</div><div class="u">Nose</div></div>
+</div>
+
+<!-- Quick labels -->
+<div class="labels" id="labelBar" style="display:none">
+  <div class="group"><span class="gl">Type</span>
+    <span class="chip" onclick="lbl('throwType','BH')">BH</span>
+    <span class="chip" onclick="lbl('throwType','FH')">FH</span>
+    <span class="chip" onclick="lbl('throwType','Roller')">Roller</span>
+    <span class="chip" onclick="lbl('throwType','Thumber')">Thumber</span>
+  </div>
+  <div class="group"><span class="gl">Effort</span>
+    <span class="chip" onclick="lbl('effort','25%')">25</span>
+    <span class="chip" onclick="lbl('effort','50%')">50</span>
+    <span class="chip" onclick="lbl('effort','75%')">75</span>
+    <span class="chip" onclick="lbl('effort','100%')">100</span>
+  </div>
 </div>
 
 <!-- Plot -->
-<div class="plot-toggle">
-  <button class="sel" id="pMag" onclick="setPlot('mag')">Mag</button>
-  <button id="pAcc" onclick="setPlot('acc')">Accel</button>
-  <button id="pGyr" onclick="setPlot('gyr')">Gyro</button>
+<div class="plot-bar">
+  <button class="on" id="pM" onclick="setP('mag')">Mag</button>
+  <button id="pA" onclick="setP('acc')">Accel</button>
+  <button id="pG" onclick="setP('gyr')">Gyro</button>
 </div>
-<canvas id="plot" height="180"></canvas>
+<canvas id="plot" height="160"></canvas>
 
-<!-- Throw list -->
-<div class="throws" id="throwList"></div>
+<!-- History -->
+<div class="hist-title"><span>Throw History</span><span id="syncStatus"></span></div>
+<div class="hist" id="histList"></div>
 
-<!-- Buttons -->
-<div class="btns">
-  <button style="background:var(--gn);color:#000" onclick="exportSession()">Export JSON</button>
-  <button style="background:var(--rd);color:#fff" onclick="sendSleep()">Power Off</button>
+<!-- Bottom -->
+<div class="bottom">
+  <button style="background:var(--gn);color:#000" onclick="exportSession()">Export</button>
+  <button style="background:var(--or);color:#000" onclick="setTee()">Set Tee</button>
+  <button style="background:var(--rd);color:#fff" onclick="sendSleep()">Off</button>
 </div>
 
 <!-- Settings -->
-<details class="bar" style="margin-top:0.4rem">
-  <summary>Sensor Calibration</summary>
-  <div id="calStatus" style="font-size:0.8rem;color:var(--mt);margin-bottom:0.3rem">Not calibrated</div>
-  <div style="font-size:0.75rem;color:var(--mt);margin-bottom:0.3rem">Place disc flat on a level surface, then tap Calibrate. This measures the sensor's mounting angle.</div>
-  <button style="background:var(--or);color:#000;font-size:0.85rem;padding:0.4rem 1rem" onclick="startCalibration()">Calibrate</button>
-</details>
-<details class="bar" style="margin-top:0.4rem">
-  <summary>Session Settings</summary>
-  <div class="form-row"><label>Disc</label><input type="text" id="sDisc" value="Discmania Genius"></div>
-  <div class="form-row"><label>Notes</label><input type="text" id="sNotes" placeholder="Session notes"></div>
+<details class="panel">
+  <summary>Settings</summary>
+  <div class="fi"><label>Disc</label><input id="sDisc" value="Discmania Genius"></div>
+  <div class="fi"><label>Name</label><input id="sName" readonly></div>
+  <div style="margin-top:.4rem;font-size:.75rem;color:var(--mt)" id="calInfo">Not calibrated</div>
+  <button style="margin-top:.3rem;padding:.3rem .8rem;font-size:.75rem;background:var(--or);color:#000;border:none;border-radius:5px;font-weight:600" onclick="startCal()">Calibrate Sensor</button>
 </details>
 
 <div class="log" id="log"></div>
 
 <script>
-// ── BLE UUIDs ──────────────────────────────────────────────
-const SVC='19b10000-e8f2-537e-4f6c-d104768a1214';
-const DATA='19b10001-e8f2-537e-4f6c-d104768a1214';
-const CTRL='19b10002-e8f2-537e-4f6c-d104768a1214';
-const STAT='19b10003-e8f2-537e-4f6c-d104768a1214';
+// ═══════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════
+const SUPA_URL='https://fjptyllozsmlhxpahocd.supabase.co';
+const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqcHR5bGxvenNtbGh4cGFob2NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzA1NjMsImV4cCI6MjA5MTc0NjU2M30.Zx3kn4TBpGFjDfSeNgUHq86FAaNtNNFV-1F1g9b0Ynk';
+const BLE_SVC='19b10000-e8f2-537e-4f6c-d104768a1214';
+const BLE_DATA='19b10001-e8f2-537e-4f6c-d104768a1214';
+const BLE_CTRL='19b10002-e8f2-537e-4f6c-d104768a1214';
+const BLE_STAT='19b10003-e8f2-537e-4f6c-d104768a1214';
 
-// ── State ──────────────────────────────────────────────────
-let phase='setup'; // setup|ready|flying|dumping|done
-let device=null,dataC=null,ctrlC=null,statC=null;
-let tee=null, currentPos=null, weather=null;
-let throws=[], plotMode='mag';
-let hdr=null, rxMag=[], rxImu=[];
-let calibrating=false;
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+let phase='setup',device=null,dataC=null,ctrlC=null,statC=null;
+let collector=localStorage.getItem('dp_name')||'';
+let cal=null;try{cal=JSON.parse(localStorage.getItem('dp_cal'));}catch(e){}
+let tee=null,pos=null,wx=null;
+let throws=[],plotMode='mag',lastThrow=null;
+let hdr=null,rxMag=[],rxImu=[],calibrating=false;
+let syncQueue=JSON.parse(localStorage.getItem('dp_queue')||'[]');
 
-// ── Calibration (persistent) ──────────────────────────────
-let cal=null;
-try{cal=JSON.parse(localStorage.getItem('discpuck_cal'));}catch(e){}
+// ═══════════════════════════════════════════════════════════
+// ONBOARDING
+// ═══════════════════════════════════════════════════════════
+function checkOnboard(){
+  if(!collector){document.getElementById('onboard').style.display='flex';}
+  else{document.getElementById('sName').value=collector;}
+}
+function finishOnboard(){
+  const n=document.getElementById('obName').value.trim();
+  if(!n){alert('Please enter your name');return;}
+  collector=n;localStorage.setItem('dp_name',n);
+  document.getElementById('onboard').style.display='none';
+  document.getElementById('sName').value=n;
+}
 
-// ── GPS ────────────────────────────────────────────────────
-const gpsHist=[];
-let gpsWatchId=null;
-
+// ═══════════════════════════════════════════════════════════
+// GPS
+// ═══════════════════════════════════════════════════════════
+const gpsH=[];
 function startGPS(){
-  if(!navigator.geolocation){document.getElementById('gpsVal').textContent='Not available';return;}
-  gpsWatchId=navigator.geolocation.watchPosition(pos=>{
-    gpsHist.push({lat:pos.coords.latitude,lon:pos.coords.longitude,acc:pos.coords.accuracy,t:Date.now()});
-    if(gpsHist.length>30)gpsHist.shift();
-    currentPos=avgGPS();
-    renderGPS();
-    // Auto-fetch weather on first good fix
-    if(!weather&&currentPos.acc<20)fetchWeather();
-  },err=>{
-    document.getElementById('gpsVal').textContent='Error: '+err.message;
-  },{enableHighAccuracy:true,maximumAge:2000,timeout:10000});
+  if(!navigator.geolocation)return;
+  navigator.geolocation.watchPosition(p=>{
+    gpsH.push({lat:p.coords.latitude,lon:p.coords.longitude,acc:p.coords.accuracy,t:Date.now()});
+    if(gpsH.length>30)gpsH.shift();
+    pos=avgGPS();
+    if(!wx&&pos.acc<20)fetchWx();
+  },()=>{},{enableHighAccuracy:true,maximumAge:2000,timeout:10000});
 }
-
 function avgGPS(){
-  const recent=gpsHist.filter(r=>Date.now()-r.t<10000);
-  if(!recent.length)return gpsHist[gpsHist.length-1];
-  const lat=recent.reduce((s,r)=>s+r.lat,0)/recent.length;
-  const lon=recent.reduce((s,r)=>s+r.lon,0)/recent.length;
-  const acc=Math.min(...recent.map(r=>r.acc));
-  return{lat,lon,acc:+acc.toFixed(1),n:recent.length};
+  const r=gpsH.filter(r=>Date.now()-r.t<10000);
+  if(!r.length)return gpsH[gpsH.length-1]||null;
+  return{lat:r.reduce((s,p)=>s+p.lat,0)/r.length,lon:r.reduce((s,p)=>s+p.lon,0)/r.length,
+    acc:+Math.min(...r.map(p=>p.acc)).toFixed(1)};
 }
 
-function renderGPS(){
-  if(!currentPos)return;
-  document.getElementById('gpsVal').textContent=
-    `${currentPos.lat.toFixed(5)}, ${currentPos.lon.toFixed(5)}`;
-  document.getElementById('gpsSub').textContent=
-    `\u00B1${currentPos.acc}m (${currentPos.n} readings)${tee?' | Tee set':''}`;
-}
-
-// ── Weather ────────────────────────────────────────────────
-async function fetchWeather(){
-  if(!currentPos)return;
+// ═══════════════════════════════════════════════════════════
+// WEATHER
+// ═══════════════════════════════════════════════════════════
+async function fetchWx(){
+  if(!pos)return;
   try{
-    const r=await fetch(`https://api.brightsky.dev/current_weather?lat=${currentPos.lat}&lon=${currentPos.lon}`);
-    const d=await r.json();
-    const w=d.weather, src=d.sources&&d.sources[0];
-    weather={
-      temp:w.temperature,
-      wind:+(w.wind_speed_10/3.6).toFixed(1), // km/h -> m/s
-      windDir:w.wind_direction_10,
-      gust:+(w.wind_gust_speed_10/3.6).toFixed(1),
-      station:src?src.station_name:'?',
-      stationDist:src?+haversine(currentPos.lat,currentPos.lon,src.lat,src.lon).toFixed(0):null
-    };
-    renderWeather();
-    log(`Weather from ${weather.station} (${weather.stationDist}m)`);
-  }catch(e){
-    document.getElementById('wxVal').textContent='Fetch failed';
-    log('Weather error: '+e.message);
-  }
+    const r=await fetch(`https://api.brightsky.dev/current_weather?lat=${pos.lat}&lon=${pos.lon}`);
+    const d=await r.json();const w=d.weather,src=d.sources?.[0];
+    wx={temp:w.temperature,wind:+(w.wind_speed_10/3.6).toFixed(1),dir:w.wind_direction_10,
+      gust:+(w.wind_gust_speed_10/3.6).toFixed(1),station:src?.station_name||'?',
+      stDist:src?+haversine(pos.lat,pos.lon,src.lat,src.lon).toFixed(0):0};
+    renderWx();
+  }catch(e){log('Weather: '+e.message);}
+}
+function renderWx(){
+  if(!wx)return;
+  const arrows='\u2193\u2199\u2190\u2196\u2191\u2197\u2192\u2198';
+  const a=arrows[Math.round((wx.dir||0)/45)%8];
+  const card=['N','NE','E','SE','S','SW','W','NW'][Math.round((wx.dir||0)/45)%8];
+  document.getElementById('wxTemp').textContent=wx.temp+'\u00B0';
+  document.getElementById('wxWind').textContent=wx.wind+'m/s '+card+' '+a+(wx.gust>wx.wind?' ('+wx.gust+')':'');
+  document.getElementById('wxStation').textContent=wx.station+' \u2022 '+(wx.stDist/1000).toFixed(1)+'km';
 }
 
-function renderWeather(){
-  if(!weather)return;
-  const arrow='\u2193\u2199\u2190\u2196\u2191\u2197\u2192\u2198'.split('');
-  const dir=arrow[Math.round((weather.windDir||0)/45)%8];
-  const card=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW']
-    [Math.round((weather.windDir||0)/22.5)%16];
-  document.getElementById('wxVal').textContent=
-    `${weather.temp}\u00B0C | ${weather.wind} m/s ${card} ${dir} (gust ${weather.gust})`;
-  document.getElementById('wxSub').textContent=
-    `${weather.station} \u2014 ${(weather.stationDist/1000).toFixed(1)} km away`;
-}
-
-// ── BLE ────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// BLE
+// ═══════════════════════════════════════════════════════════
 async function bleConnect(){
   try{
-    if(!device){
-      device=await navigator.bluetooth.requestDevice({filters:[{services:[SVC]}]});
-    }
-    const srv=await(await device.gatt.connect()).getPrimaryService(SVC);
-    dataC=await srv.getCharacteristic(DATA);
-    ctrlC=await srv.getCharacteristic(CTRL);
-    statC=await srv.getCharacteristic(STAT);
-    await dataC.startNotifications();
-    dataC.addEventListener('characteristicvaluechanged',onData);
-    await statC.startNotifications();
-    statC.addEventListener('characteristicvaluechanged',onStatus);
-    device.addEventListener('gattserverdisconnected',onDisconnect);
-    log('BLE connected');
-    return true;
-  }catch(e){log('BLE error: '+e.message);return false;}
+    if(!device)device=await navigator.bluetooth.requestDevice({filters:[{services:[BLE_SVC]}]});
+    const srv=await(await device.gatt.connect()).getPrimaryService(BLE_SVC);
+    dataC=await srv.getCharacteristic(BLE_DATA);
+    ctrlC=await srv.getCharacteristic(BLE_CTRL);
+    statC=await srv.getCharacteristic(BLE_STAT);
+    await dataC.startNotifications();dataC.addEventListener('characteristicvaluechanged',onData);
+    await statC.startNotifications();statC.addEventListener('characteristicvaluechanged',onStat);
+    device.addEventListener('gattserverdisconnected',()=>{
+      setBLE(false);if(phase==='fly')setPhase('fly');
+    });
+    setBLE(true);log('Connected');return true;
+  }catch(e){log('BLE: '+e.message);return false;}
+}
+function setBLE(on){
+  document.getElementById('bleDot').className='dot '+(on?'on':'off');
+  document.getElementById('bleLabel').textContent=on?'Connected':'Disconnected';
 }
 
-function bleDisconnect(){
-  if(device&&device.gatt.connected)device.gatt.disconnect();
-}
-
-function onDisconnect(){
-  log('BLE disconnected');
-  if(phase==='flying')setAction('flying');
-}
-
-async function bleArm(){
-  if(!ctrlC)return false;
-  await ctrlC.writeValue(new Uint8Array([0x01]));
-  return true;
-}
-
-async function bleRequestDump(){
-  if(!ctrlC)return;
-  await ctrlC.writeValue(new Uint8Array([0x03]));
-}
-
-// ── Calibration ────────────────────────────────────────────
-function startCalibration(){
-  if(!ctrlC){alert('Connect to the puck first!');return;}
-  alert('Place disc FLAT on a level surface.\n\nCalibration starts when you dismiss this.');
-  calibrating=true; hdr=null; rxMag=[]; rxImu=[];
-  document.getElementById('actionBtn').textContent='CALIBRATING...';document.getElementById('actionBtn').className='btn-dumping';
-  document.getElementById('actionHint').textContent='Recording 2 seconds of rest data...';
-  log('Calibrating... sending ARM');
-  ctrlC.writeValue(new Uint8Array([0x01])).then(()=>{
-    log('ARM sent, waiting 2.5s...');
-    setTimeout(()=>{
-      log('Sending stop+dump...');
-      ctrlC.writeValue(new Uint8Array([0x03])).then(()=>{
-        log('Dump requested, waiting for data...');
-      }).catch(e=>{calibrating=false;alert('Failed to stop: '+e.message);});
-    },2500);
-  }).catch(e=>{calibrating=false;alert('Failed to ARM: '+e.message);});
-}
-
-function finishCalibration(){
-  calibrating=false;
-  if(rxImu.length<10){
-    alert('Calibration failed: only '+rxImu.length+' IMU samples received.');
-    setAction('ready');return;
-  }
-  let sx=0,sy=0,sz=0;
-  for(const s of rxImu){sx+=s.ax;sy+=s.ay;sz+=s.az;}
-  const n=rxImu.length;
-  cal={gx:sx/n,gy:sy/n,gz:sz/n,date:new Date().toISOString()};
-  localStorage.setItem('discpuck_cal',JSON.stringify(cal));
-  const gmag=Math.sqrt(cal.gx*cal.gx+cal.gy*cal.gy+cal.gz*cal.gz);
-  const tilt=Math.acos(Math.min(1,Math.abs(cal.gz)/gmag))*180/Math.PI;
-  hdr=null;rxMag=[];rxImu=[];
-  renderCalStatus();
-  setAction('ready');
-  document.getElementById('actionBtn').textContent='CALIBRATED';document.getElementById('actionBtn').className='btn-next';
-  alert('Calibration saved!\n\nSensor tilt from disc: '+tilt.toFixed(1)+'\u00B0\n|g| = '+gmag.toFixed(2)+' m/s\u00B2\nIMU samples: '+n);
-}
-
-function renderCalStatus(){
-  const el=document.getElementById('calStatus');
-  if(cal){
-    const mag=Math.sqrt(cal.gx*cal.gx+cal.gy*cal.gy+cal.gz*cal.gz);
-    // Compute mounting tilt from pure Z-axis
-    const tilt=Math.acos(Math.abs(cal.gz)/mag)*180/Math.PI;
-    el.innerHTML=`<span style="color:var(--gn)">\u2713 Calibrated</span> (${cal.date.slice(0,10)}) | sensor tilt: ${tilt.toFixed(1)}\u00B0`;
-  }else{
-    el.textContent='Not calibrated \u2014 angle estimates will be unavailable';
-  }
-}
-
-// ── Data handler ───────────────────────────────────────────
 function onData(e){
   const b=e.target.value,len=b.byteLength;
   if(len===20&&!hdr){
-    hdr={magN:b.getUint16(0,true),imuN:b.getUint16(2,true),
-         magHz:b.getUint16(4,true),imuHz:b.getUint16(6,true)};
-    rxMag=[];rxImu=[];
-    log(`Header: ${hdr.magN}mag + ${hdr.imuN}imu`);
-    setAction('dumping');
-    return;
+    hdr={magN:b.getUint16(0,true),imuN:b.getUint16(2,true),magHz:b.getUint16(4,true),imuHz:b.getUint16(6,true)};
+    rxMag=[];rxImu=[];setPhase('recv');return;
   }
-  if(len===18||len===6){
-    const n=len/6;
-    for(let i=0;i<n;i++)rxMag.push({
-      x:b.getInt16(i*6,true)/10,y:b.getInt16(i*6+2,true)/10,z:b.getInt16(i*6+4,true)/10});
-  }else if(len===12){
-    rxImu.push({ax:b.getInt16(0,true)/100,ay:b.getInt16(2,true)/100,az:b.getInt16(4,true)/100,
-      gx:b.getInt16(6,true)/100,gy:b.getInt16(8,true)/100,gz:b.getInt16(10,true)/100});
-  }
-  if(hdr){
-    const pct=Math.floor((rxMag.length+rxImu.length)/(hdr.magN+hdr.imuN)*100);
-    document.getElementById('actionBtn').textContent=`RECEIVING ${pct}%`;
-  }
+  if(len===18||len===6){const n=len/6;for(let i=0;i<n;i++)rxMag.push({
+    x:b.getInt16(i*6,true)/10,y:b.getInt16(i*6+2,true)/10,z:b.getInt16(i*6+4,true)/10});}
+  else if(len===12){rxImu.push({ax:b.getInt16(0,true)/100,ay:b.getInt16(2,true)/100,
+    az:b.getInt16(4,true)/100,gx:b.getInt16(6,true)/100,gy:b.getInt16(8,true)/100,gz:b.getInt16(10,true)/100});}
+  if(hdr){const p=Math.floor((rxMag.length+rxImu.length)/(hdr.magN+hdr.imuN)*100);
+    document.getElementById('actBtn').textContent='RECEIVING '+p+'%';}
 }
-
-function onStatus(e){
+function onStat(e){
   const b=e.target.value;if(b.byteLength<5)return;
-  const st=b.getUint8(0);
-  if(st===3){if(calibrating)finishCalibration();else finishThrow();} // DONE
+  if(b.getUint8(0)===3){if(calibrating)finishCal();else finishThrow();}
 }
 
-// ── Action state machine ───────────────────────────────────
-function setAction(p){
-  phase=p;
-  const btn=document.getElementById('actionBtn');
-  const hint=document.getElementById('actionHint');
+// ═══════════════════════════════════════════════════════════
+// PHASE MACHINE
+// ═══════════════════════════════════════════════════════════
+function setPhase(p){
+  phase=p;const btn=document.getElementById('actBtn'),hint=document.getElementById('actHint');
   btn.className='';
-  if(p==='setup'){
-    btn.className='btn-connect';btn.textContent='CONNECT';
-    hint.textContent='Pair with DiscPuck to start';
-  }else if(p==='ready'){
-    btn.className='btn-throw';btn.textContent='THROW';
-    hint.textContent='Tap to arm + disconnect. Then throw!';
-  }else if(p==='flying'){
-    btn.className='btn-landed';btn.textContent='LANDED \u2014 FETCH DATA';
-    hint.textContent='Walk to disc, tap when there';
-  }else if(p==='dumping'){
-    btn.className='btn-dumping';btn.textContent='RECEIVING...';
-    hint.textContent='';
-  }else if(p==='done'){
-    btn.className='btn-next';btn.textContent='NEXT THROW';
-    hint.textContent='Or tap "Set Tee Here" to throw from this spot';
-  }
+  if(p==='setup'){btn.className='btn-connect';btn.textContent='CONNECT';hint.textContent='Pair with your DiscPuck sensor';}
+  else if(p==='ready'){btn.className='btn-throw';btn.textContent='THROW';hint.textContent='Arms sensor + disconnects. Then throw!';}
+  else if(p==='fly'){btn.className='btn-landed';btn.textContent='LANDED';hint.textContent='Tap when at disc landing spot';}
+  else if(p==='recv'){btn.className='btn-recv';btn.textContent='RECEIVING...';hint.textContent='';}
+  else if(p==='done'){btn.className='btn-next';btn.textContent='NEXT THROW';hint.textContent='';
+    document.getElementById('labelBar').style.display='flex';}
+  updateTee();
 }
 
 async function doAction(){
-  if(phase==='setup'){
-    // Connect
-    if(await bleConnect()){
-      if(!tee&&currentPos)tee={...currentPos};
-      setAction('ready');
-    }
-  }else if(phase==='ready'){
-    // Arm + disconnect + record tee
-    if(!tee&&currentPos)tee={...currentPos};
-    hdr=null;rxMag=[];rxImu=[];
-    if(await bleArm()){
-      bleDisconnect();
-      setAction('flying');
-      log('Armed + disconnected. Throw!');
-    }
-  }else if(phase==='flying'){
-    // Record landing + reconnect + dump
-    const landing=currentPos?{...currentPos}:null;
-    if(landing)log(`Landing: ${landing.lat.toFixed(5)}, ${landing.lon.toFixed(5)} \u00B1${landing.acc}m`);
-    // Store landing for finishThrow
-    window._landing=landing;
-    if(await bleConnect()){
-      await bleRequestDump();
-    }
+  if(phase==='setup'){if(await bleConnect()){if(!tee&&pos)tee={...pos};setPhase('ready');}}
+  else if(phase==='ready'){
+    if(!tee&&pos)tee={...pos};hdr=null;rxMag=[];rxImu=[];
+    if(ctrlC){await ctrlC.writeValue(new Uint8Array([0x01]));
+      if(device?.gatt.connected)device.gatt.disconnect();setPhase('fly');log('Armed + DC');}
+  }else if(phase==='fly'){
+    window._land=pos?{...pos}:null;
+    if(await bleConnect())await ctrlC.writeValue(new Uint8Array([0x03]));
   }else if(phase==='done'){
-    // Next throw — reconnect if needed
-    if(!device||!device.gatt.connected){
-      if(await bleConnect()) setAction('ready');
-    }else{
-      setAction('ready');
-    }
+    document.getElementById('labelBar').style.display='none';
+    if(!device?.gatt.connected){if(await bleConnect())setPhase('ready');} else setPhase('ready');
   }
 }
 
-function setTeeHere(){
-  if(currentPos){
-    tee={...currentPos};
-    renderGPS();
-    log(`Tee updated: ${tee.lat.toFixed(5)}, ${tee.lon.toFixed(5)}`);
-  }
+function setTee(){if(pos){tee={...pos};updateTee();log('Tee updated');}}
+function updateTee(){
+  const el=document.getElementById('teeInfo');
+  el.textContent=tee?`Tee: ${tee.lat.toFixed(5)}, ${tee.lon.toFixed(5)} (\u00B1${tee.acc}m)`:'No tee set';
 }
 
-// ── Finish throw ───────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// CALIBRATION
+// ═══════════════════════════════════════════════════════════
+function startCal(){
+  if(!ctrlC){alert('Connect first!');return;}
+  alert('Place disc FLAT on level surface.\nCalibration starts when you dismiss this.');
+  calibrating=true;hdr=null;rxMag=[];rxImu=[];
+  document.getElementById('actBtn').textContent='CALIBRATING...';
+  ctrlC.writeValue(new Uint8Array([0x01])).then(()=>{
+    setTimeout(()=>{ctrlC.writeValue(new Uint8Array([0x03])).catch(e=>alert('Cal fail: '+e.message));},2500);
+  }).catch(e=>{calibrating=false;alert('Cal fail: '+e.message);});
+}
+function finishCal(){
+  calibrating=false;
+  if(rxImu.length<10){alert('Calibration failed: '+rxImu.length+' samples');setPhase('ready');return;}
+  let sx=0,sy=0,sz=0;for(const s of rxImu){sx+=s.ax;sy+=s.ay;sz+=s.az;}
+  const n=rxImu.length;
+  cal={gx:sx/n,gy:sy/n,gz:sz/n,date:new Date().toISOString()};
+  localStorage.setItem('dp_cal',JSON.stringify(cal));
+  const gm=Math.sqrt(cal.gx*cal.gx+cal.gy*cal.gy+cal.gz*cal.gz);
+  const tilt=Math.acos(Math.min(1,Math.abs(cal.gz)/gm))*180/Math.PI;
+  hdr=null;rxMag=[];rxImu=[];renderCal();setPhase('ready');
+  alert('Calibrated!\nTilt: '+tilt.toFixed(1)+'\u00B0 | Samples: '+n);
+}
+function renderCal(){
+  const el=document.getElementById('calInfo');
+  if(cal){const gm=Math.sqrt(cal.gx*cal.gx+cal.gy*cal.gy+cal.gz*cal.gz);
+    const t=Math.acos(Math.min(1,Math.abs(cal.gz)/gm))*180/Math.PI;
+    el.innerHTML='<span style="color:var(--gn)">\u2713</span> Calibrated (tilt: '+t.toFixed(1)+'\u00B0) \u2022 '+cal.date.slice(0,10);
+  }else el.textContent='Not calibrated \u2014 angles unavailable';
+}
+
+// ═══════════════════════════════════════════════════════════
+// FINISH THROW
+// ═══════════════════════════════════════════════════════════
 function finishThrow(){
-  if(!hdr||rxMag.length<10){setAction('ready');return;}
-  const magDt=1000/hdr.magHz, imuDt=1000/hdr.imuHz;
-  for(let i=0;i<rxMag.length;i++)rxMag[i].t=i*magDt;
-  for(let i=0;i<rxImu.length;i++)rxImu[i].t=i*imuDt;
-  const durS=rxMag.length>0?((rxMag.length-1)*magDt/1000):0;
+  if(!hdr||rxMag.length<10){setPhase('ready');return;}
+  const mDt=1000/hdr.magHz,iDt=1000/hdr.imuHz;
+  for(let i=0;i<rxMag.length;i++)rxMag[i].t=i*mDt;
+  for(let i=0;i<rxImu.length;i++)rxImu[i].t=i*iDt;
 
   // FFT
-  let peakRPM=0;
-  const N=rxMag.length;
-  if(N>=64){
-    const fN=Math.min(1024,2**Math.floor(Math.log2(N)));
-    const mid=Math.floor(N/2),start=Math.max(0,mid-Math.floor(fN/2));
-    const win=rxMag.slice(start,start+fN),sr=hdr.magHz;
-    const sig=win.map(s=>s.x),mean=sig.reduce((a,b)=>a+b,0)/sig.length;
-    const w=sig.map((v,i)=>(v-mean)*0.5*(1-Math.cos(2*Math.PI*i/(sig.length-1))));
-    const mags=fft(w),fR=sr/fN;
-    let pB=1,pM=0;
-    for(let k=Math.max(1,Math.floor(0.5/fR));k<Math.min(mags.length-1,Math.floor(sr/2/fR));k++)
-      if(mags[k]>pM){pM=mags[k];pB=k;}
-    peakRPM=Math.round(pB*fR*60);
-  }
+  let rpm=0;const N=rxMag.length;
+  if(N>=64){const fN=Math.min(1024,2**Math.floor(Math.log2(N)));
+    const mid=Math.floor(N/2),st=Math.max(0,mid-Math.floor(fN/2));
+    const w=rxMag.slice(st,st+fN),sr=hdr.magHz,sig=w.map(s=>s.x);
+    const mn=sig.reduce((a,b)=>a+b,0)/sig.length;
+    const h=sig.map((v,i)=>(v-mn)*.5*(1-Math.cos(2*Math.PI*i/(sig.length-1))));
+    const m=fft(h),fR=sr/fN;let pB=1,pM=0;
+    for(let k=Math.max(1,Math.floor(.5/fR));k<Math.min(m.length-1,Math.floor(sr/2/fR));k++)if(m[k]>pM){pM=m[k];pB=k;}
+    rpm=Math.round(pB*fR*60);}
 
-  // Peak G
-  let peakG=0;
-  for(const s of rxImu){const g=Math.sqrt(s.ax*s.ax+s.ay*s.ay+s.az*s.az)/9.81;if(g>peakG)peakG=g;}
-
-  // Distance
-  const landing=window._landing||null;
+  let peakG=0;for(const s of rxImu){const g=Math.sqrt(s.ax*s.ax+s.ay*s.ay+s.az*s.az)/9.81;if(g>peakG)peakG=g;}
+  const land=window._land||null;
   let dist=null,bear=null;
-  if(tee&&landing){
-    dist=+haversine(tee.lat,tee.lon,landing.lat,landing.lon).toFixed(1);
-    bear=+bearing(tee.lat,tee.lon,landing.lat,landing.lon).toFixed(0);
-  }
+  if(tee&&land){dist=+haversine(tee.lat,tee.lon,land.lat,land.lon).toFixed(1);bear=+bearing(tee.lat,tee.lon,land.lat,land.lon).toFixed(0);}
+  const dur=N>0?((N-1)*mDt/1000):0;
 
-  const t={
-    id:throws.length+1, time:new Date().toLocaleTimeString(),
-    tee:tee?{...tee}:null, landing,
-    distance:dist, bearing:bear,
-    weather:weather?{...weather}:null,
-    header:{...hdr}, magSamples:[...rxMag], imuSamples:[...rxImu],
-    duration:durS.toFixed(1), peakRPM, peakG:+peakG.toFixed(1),
-    throwType:'',effort:'',flightShape:'',notes:'',
-    // Computed by analyzeThrow:
-    releaseMs:null,landingMs:null,flightTime:null,estSpeed:null,spinQuality:null,
-    noseAngle:null,hyzerAngle:null
-  };
+  const t={id:throws.length+1,time:new Date().toISOString(),collector,disc:document.getElementById('sDisc').value,
+    tee:tee?{...tee}:null,landing:land,distance:dist,bearing:bear,wx:wx?{...wx}:null,
+    header:{...hdr},magSamples:[...rxMag],imuSamples:[...rxImu],
+    duration:+dur.toFixed(1),peakRPM:rpm,peakG:+peakG.toFixed(1),
+    releaseMs:null,landingMs:null,flightTime:null,estSpeed:null,spinQuality:null,hyzerAngle:null,noseAngle:null,
+    throwType:'',effort:'',notes:'',synced:false};
+
   analyzeThrow(t);
-  throws.push(t);
-  hdr=null;rxMag=[];rxImu=[];window._landing=null;
-
-  document.getElementById('sThrows').textContent=throws.length;
-  document.getElementById('sDist').textContent=dist?dist+'m':'--';
-  document.getElementById('sRPM').textContent=peakRPM;
-  document.getElementById('sG').textContent=t.peakG+'g';
-
-  const parts=[`Throw #${t.id}:`];
-  if(dist)parts.push(dist+'m');
-  if(t.estSpeed)parts.push('~'+t.estSpeed+' m/s');
-  parts.push('~'+peakRPM+' RPM');
-  parts.push(t.peakG+'g');
-  if(t.flightTime)parts.push('flight '+t.flightTime+'s');
-  if(t.hyzerAngle!=null)parts.push('hyzer '+t.hyzerAngle+'\u00B0');
-  if(t.noseAngle!=null)parts.push('nose '+t.noseAngle+'\u00B0');
-  if(t.spinQuality!=null)parts.push('spin '+t.spinQuality+'%');
-  const summary=parts.join(' | ');
-  log(summary);
-  setAction('done');
-  document.getElementById('actionHint').textContent=summary;
-  renderThrows();
-  drawPlot(t);
+  throws.push(t);lastThrow=t;
+  hdr=null;rxMag=[];rxImu=[];window._land=null;
+  updateMetrics(t);setPhase('done');renderHist();drawPlot(t);
+  syncThrow(t);
+  log('#'+t.id+': '+(dist?dist+'m ':'')+rpm+'RPM '+t.peakG+'g'+(t.flightTime?' '+t.flightTime+'s':''));
 }
 
-// ── FFT ────────────────────────────────────────────────────
-function fft(s){const N=s.length,m=new Float64Array(N/2);for(let k=0;k<N/2;k++){let re=0,im=0;
-  for(let n=0;n<N;n++){const a=-2*Math.PI*k*n/N;re+=s[n]*Math.cos(a);im+=s[n]*Math.sin(a);}
-  m[k]=Math.sqrt(re*re+im*im)/N;}return m;}
+function updateMetrics(t){
+  const $ =id=>document.getElementById(id);
+  $('mDist').textContent=t.distance?t.distance+'m':'--';
+  $('mRPM').textContent=t.peakRPM||'--';
+  $('mG').textContent=t.peakG?t.peakG+'g':'--';
+  $('mSpd').textContent=t.estSpeed?t.estSpeed+'m/s':'--';
+  $('mHyz').textContent=t.hyzerAngle!=null?t.hyzerAngle+'\u00B0':'--';
+  $('mNose').textContent=t.noseAngle!=null?t.noseAngle+'\u00B0':'--';
+  document.querySelectorAll('.mc').forEach(el=>{el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');});
+}
 
-// ── Throw analysis ─────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// LABELS
+// ═══════════════════════════════════════════════════════════
+function lbl(key,val){
+  if(!lastThrow)return;lastThrow[key]=val;
+  document.querySelectorAll('.chip').forEach(c=>{
+    const k=c.onclick.toString().match(/'(\w+)','(.+?)'/);
+    if(k)c.className='chip'+(lastThrow[k[1]]===k[2]?' on':'');
+  });
+  syncThrow(lastThrow);
+}
+
+// ═══════════════════════════════════════════════════════════
+// ANALYSIS
+// ═══════════════════════════════════════════════════════════
 function analyzeThrow(t){
-  const imu=t.imuSamples, mag=t.magSamples;
+  const imu=t.imuSamples,mag=t.magSamples;
   if(imu.length<30||mag.length<100)return;
-  const imuDt=1000/t.header.imuHz, magDt=1000/t.header.magHz;
-  const magPerImu=Math.round(t.header.magHz/t.header.imuHz);
-
-  // |accel| in g
-  const gArr=imu.map(s=>Math.sqrt(s.ax*s.ax+s.ay*s.ay+s.az*s.az)/9.81);
-
-  // ── Step 1: Find flight via mag oscillation ─────────
-  // Compute mag variance in windows aligned to IMU timeline
-  const halfWin=Math.floor(magPerImu*2.5); // ~25 mag samples = 50ms
-  const magVar=[];
-  for(let i=0;i<imu.length;i++){
-    const mc=i*magPerImu;
-    const s=Math.max(0,mc-halfWin), e=Math.min(mag.length,mc+halfWin);
-    if(e-s<5){magVar.push(0);continue;}
-    let sum=0,sum2=0,n=0;
-    for(let j=s;j<e;j++){sum+=mag[j].x;sum2+=mag[j].x*mag[j].x;n++;}
-    magVar.push(sum2/n-(sum/n)*(sum/n));
-  }
-
-  // Threshold: 75th percentile of variance, minimum 1
-  const sv=[...magVar].sort((a,b)=>a-b);
-  const thresh=Math.max(sv[Math.floor(sv.length*0.75)]||1, 1);
-
-  // Find longest region above threshold = flight
-  let fStart=-1,fEnd=-1,fLen=0,cs=-1;
-  for(let i=0;i<magVar.length;i++){
-    if(magVar[i]>thresh){if(cs===-1)cs=i;}
-    else{if(cs!==-1){if(i-cs>fLen){fStart=cs;fEnd=i;fLen=i-cs;}cs=-1;}}
-  }
-  if(cs!==-1&&magVar.length-cs>fLen){fStart=cs;fEnd=magVar.length;fLen=fEnd-fStart;}
-
-  if(fLen<5)return; // no clear flight
-
-  // ── Step 2: Find accel peaks bracketing the flight ──
-  // Release: highest peak within 1s before flight start
-  const searchPre=Math.max(0,fStart-Math.floor(t.header.imuHz));
-  let relIdx=fStart,relG=0;
-  for(let i=searchPre;i<=fStart;i++){if(gArr[i]>relG){relG=gArr[i];relIdx=i;}}
-  if(relG<1.5)relIdx=fStart;
-
-  // Landing: highest peak within 1s after flight end
-  const searchPost=Math.min(imu.length,fEnd+Math.floor(t.header.imuHz));
-  let landIdx=-1,landG=0;
-  for(let i=fEnd;i<searchPost;i++){if(gArr[i]>landG){landG=gArr[i];landIdx=i;}}
-  if(landG<1.5)landIdx=-1;
-
-  // Peak G is the higher of the two
-  const peakIdx=relG>=landG?relIdx:(landIdx>=0?landIdx:relIdx);
-
-  t.releaseMs=+(relIdx*imuDt).toFixed(0);
-  t.landingMs=landIdx>=0?+(landIdx*imuDt).toFixed(0):null;
+  const iDt=1000/t.header.imuHz,mDt=1000/t.header.magHz,mpi=Math.round(t.header.magHz/t.header.imuHz);
+  const gA=imu.map(s=>Math.sqrt(s.ax*s.ax+s.ay*s.ay+s.az*s.az)/9.81);
+  // Mag variance per IMU sample
+  const hw=Math.floor(mpi*2.5),mv=[];
+  for(let i=0;i<imu.length;i++){const c=i*mpi,s=Math.max(0,c-hw),e=Math.min(mag.length,c+hw);
+    if(e-s<5){mv.push(0);continue;}let sm=0,s2=0,n=0;
+    for(let j=s;j<e;j++){sm+=mag[j].x;s2+=mag[j].x*mag[j].x;n++;}mv.push(s2/n-(sm/n)**2);}
+  // Flight region
+  const sv=[...mv].sort((a,b)=>a-b),th=Math.max(sv[Math.floor(sv.length*.75)]||1,1);
+  let fS=-1,fE=-1,fL=0,cs=-1;
+  for(let i=0;i<mv.length;i++){if(mv[i]>th){if(cs===-1)cs=i;}else{if(cs!==-1){if(i-cs>fL){fS=cs;fE=i;fL=i-cs;}cs=-1;}}}
+  if(cs!==-1&&mv.length-cs>fL){fS=cs;fE=mv.length;fL=fE-fS;}
+  if(fL<5)return;
+  // Peaks
+  const pre=Math.max(0,fS-Math.floor(t.header.imuHz));
+  let rI=fS,rG=0;for(let i=pre;i<=fS;i++)if(gA[i]>rG){rG=gA[i];rI=i;}
+  const post=Math.min(imu.length,fE+Math.floor(t.header.imuHz));
+  let lI=-1,lG=0;for(let i=fE;i<post;i++)if(gA[i]>lG){lG=gA[i];lI=i;}
+  if(lG<1.5)lI=-1;
+  const pI=rG>=lG?rI:(lI>=0?lI:rI);
+  t.releaseMs=+(rI*iDt).toFixed(0);t.landingMs=lI>=0?+(lI*iDt).toFixed(0):null;
   t.flightTime=t.landingMs!=null?+((t.landingMs-t.releaseMs)/1000).toFixed(2):null;
-
-  // ── Step 3: Speed from GPS ──────────────────────────
-  if(t.distance&&t.flightTime&&t.flightTime>0.1){
-    t.estSpeed=+(t.distance/t.flightTime).toFixed(1);
-  }
-
-  // ── Step 4: Spin quality from flight-only mag FFT ───
-  const mStart=Math.floor(t.releaseMs/magDt);
-  const mEnd=t.landingMs?Math.floor(t.landingMs/magDt):mag.length;
-  const fMag=mag.slice(mStart,Math.min(mEnd,mStart+2048));
-  if(fMag.length>=64){
-    const fN=2**Math.floor(Math.log2(fMag.length));
-    const sig=fMag.slice(0,fN).map(s=>s.x);
-    const mean=sig.reduce((a,b)=>a+b,0)/sig.length;
-    const w=sig.map((v,i)=>(v-mean)*0.5*(1-Math.cos(2*Math.PI*i/(sig.length-1))));
-    const ms=fft(w);
-    let spinBin=1,spinVal=0;
-    for(let k=2;k<ms.length-1;k++)if(ms[k]>spinVal){spinVal=ms[k];spinBin=k;}
-    let peakE=0,totalE=0;
-    for(let k=1;k<ms.length;k++)totalE+=ms[k]*ms[k];
-    for(let k=Math.max(1,spinBin-2);k<=Math.min(ms.length-1,spinBin+2);k++)peakE+=ms[k]*ms[k];
-    t.spinQuality=totalE>0?Math.round(peakE/totalE*100):0;
-  }
-
-  // ── Step 5: Hyzer & nose (requires calibration) ─────
-  if(!cal)return;
-  const cmag=Math.sqrt(cal.gx*cal.gx+cal.gy*cal.gy+cal.gz*cal.gz);
-  if(cmag<0.1)return;
-  const N={x:cal.gx/cmag,y:cal.gy/cmag,z:cal.gz/cmag};
-
-  // Forward = throw direction from peak accel, projected into disc plane
-  const pk=imu[peakIdx];
-  const pDotN=pk.ax*N.x+pk.ay*N.y+pk.az*N.z;
-  let fx=pk.ax-pDotN*N.x,fy=pk.ay-pDotN*N.y,fz=pk.az-pDotN*N.z;
-  const fm=Math.sqrt(fx*fx+fy*fy+fz*fz);
-  if(fm<0.1)return;
-  fx/=fm;fy/=fm;fz/=fm;
-  const lx=N.y*fz-N.z*fy,ly=N.z*fx-N.x*fz,lz=N.x*fy-N.y*fx;
-
-  // "Up" from accel just after release (avg 50ms)
-  const ri=Math.floor(t.releaseMs/imuDt);
-  const win=imu.slice(ri,ri+5);
-  if(win.length<3)return;
-  let ux=0,uy=0,uz=0;
-  for(const s of win){ux+=s.ax;uy+=s.ay;uz+=s.az;}
+  if(t.distance&&t.flightTime&&t.flightTime>.1)t.estSpeed=+(t.distance/t.flightTime).toFixed(1);
+  // Spin quality
+  const ms=Math.floor(t.releaseMs/mDt),me=t.landingMs?Math.floor(t.landingMs/mDt):mag.length;
+  const fm=mag.slice(ms,Math.min(me,ms+2048));
+  if(fm.length>=64){const fN=2**Math.floor(Math.log2(fm.length)),sig=fm.slice(0,fN).map(s=>s.x);
+    const mn=sig.reduce((a,b)=>a+b,0)/sig.length;
+    const w=sig.map((v,i)=>(v-mn)*.5*(1-Math.cos(2*Math.PI*i/(sig.length-1))));
+    const mg=fft(w);let sB=1,sV=0;for(let k=2;k<mg.length-1;k++)if(mg[k]>sV){sV=mg[k];sB=k;}
+    let pE=0,tE=0;for(let k=1;k<mg.length;k++)tE+=mg[k]**2;
+    for(let k=Math.max(1,sB-2);k<=Math.min(mg.length-1,sB+2);k++)pE+=mg[k]**2;
+    t.spinQuality=tE>0?Math.round(pE/tE*100):0;}
+  // Angles
+  if(!cal)return;const cm=Math.sqrt(cal.gx**2+cal.gy**2+cal.gz**2);if(cm<.1)return;
+  const N_={x:cal.gx/cm,y:cal.gy/cm,z:cal.gz/cm};
+  const pk=imu[pI],pdn=pk.ax*N_.x+pk.ay*N_.y+pk.az*N_.z;
+  let fx=pk.ax-pdn*N_.x,fy=pk.ay-pdn*N_.y,fz=pk.az-pdn*N_.z;
+  const fm2=Math.sqrt(fx*fx+fy*fy+fz*fz);if(fm2<.1)return;fx/=fm2;fy/=fm2;fz/=fm2;
+  const lx=N_.y*fz-N_.z*fy,ly=N_.z*fx-N_.x*fz,lz=N_.x*fy-N_.y*fx;
+  const ri=Math.floor(t.releaseMs/iDt),win=imu.slice(ri,ri+5);if(win.length<3)return;
+  let ux=0,uy=0,uz=0;for(const s of win){ux+=s.ax;uy+=s.ay;uz+=s.az;}
   ux/=win.length;uy/=win.length;uz/=win.length;
-  const um=Math.sqrt(ux*ux+uy*uy+uz*uz);
-  if(um<0.1)return;
-  ux/=um;uy/=um;uz/=um;
-
-  const uN=ux*N.x+uy*N.y+uz*N.z;
-  const uF=ux*fx+uy*fy+uz*fz;
-  const uL=ux*lx+uy*ly+uz*lz;
+  const um=Math.sqrt(ux*ux+uy*uy+uz*uz);if(um<.1)return;ux/=um;uy/=um;uz/=um;
+  const uN=ux*N_.x+uy*N_.y+uz*N_.z,uF=ux*fx+uy*fy+uz*fz,uL=ux*lx+uy*ly+uz*lz;
   t.noseAngle=+(-Math.atan2(uF,uN)*180/Math.PI).toFixed(1);
   t.hyzerAngle=+(Math.atan2(uL,uN)*180/Math.PI).toFixed(1);
 }
 
-// ── Geo utils ──────────────────────────────────────────────
-function haversine(a,b,c,d){
-  const R=6371000,dr=Math.PI/180;
-  const dLat=(c-a)*dr,dLon=(d-b)*dr;
-  const x=Math.sin(dLat/2)**2+Math.cos(a*dr)*Math.cos(c*dr)*Math.sin(dLon/2)**2;
-  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
-}
-function bearing(a,b,c,d){
-  const dr=Math.PI/180,dL=(d-b)*dr;
-  const y=Math.sin(dL)*Math.cos(c*dr);
-  const x=Math.cos(a*dr)*Math.sin(c*dr)-Math.sin(a*dr)*Math.cos(c*dr)*Math.cos(dL);
-  return(Math.atan2(y,x)*180/Math.PI+360)%360;
-}
+function fft(s){const N=s.length,m=new Float64Array(N/2);for(let k=0;k<N/2;k++){let re=0,im=0;
+  for(let n=0;n<N;n++){const a=-2*Math.PI*k*n/N;re+=s[n]*Math.cos(a);im+=s[n]*Math.sin(a);}
+  m[k]=Math.sqrt(re*re+im*im)/N;}return m;}
 
-// ── Throw list ─────────────────────────────────────────────
-function renderThrows(){
-  const el=document.getElementById('throwList');
-  if(!throws.length)return;
-  el.innerHTML=throws.map((t,i)=>{
-    const d=t.distance?`${t.distance}m`:'--';
-    const spd=t.estSpeed?`${t.estSpeed}m/s`:'';
-    const fl=t.flightTime?`fly${t.flightTime}s`:'';
-    const sq=t.spinQuality!=null?`spin${t.spinQuality}%`:'';
-    const hy=t.hyzerAngle!=null?`H${t.hyzerAngle}\u00B0`:'';
-    const no=t.noseAngle!=null?`N${t.noseAngle}\u00B0`:'';
-    const parts=[d,`${t.peakRPM}RPM`,`${t.peakG}g`,spd,fl,hy,no,sq].filter(Boolean).join(' | ');
-    return`<div class="ti">
-      <div class="hd"><strong>#${t.id}</strong> <span style="font-size:0.75rem">${parts}</span>
-        <button style="font-size:0.65rem;padding:0.1rem 0.3rem;background:var(--bd);color:var(--mt);border:none;border-radius:3px"
-          onclick="drawPlot(throws[${i}])">Plot</button></div>
-      <div class="tags"><span style="color:var(--mt);font-size:0.65rem">Type</span>
-        ${['BH','FH','Roller','Thumber'].map((v,j)=>{const k=['backhand','forehand','roller','thumber'][j];
-          return`<button class="${t.throwType===k?'sel':''}" onclick="setLbl(${i},'throwType','${k}')">${v}</button>`;}).join('')}
-        <span style="color:var(--mt);font-size:0.65rem;margin-left:0.3rem">Effort</span>
-        ${['25','50','75','100'].map(v=>
-          `<button class="${t.effort===v+'%'?'sel':''}" onclick="setLbl(${i},'effort','${v}%')">${v}%</button>`).join('')}
-      </div>
-    </div>`;}).join('');
-  // Add "Set Tee Here" after last throw if in done state
-  if(phase==='done'){
-    el.innerHTML+=`<div style="text-align:center;margin-top:0.3rem">
-      <button class="btn-tee" onclick="setTeeHere()">SET TEE HERE</button></div>`;
+// ═══════════════════════════════════════════════════════════
+// SUPABASE SYNC
+// ═══════════════════════════════════════════════════════════
+async function syncThrow(t){
+  const row={collector:t.collector,disc:t.disc,
+    tee_lat:t.tee?.lat,tee_lon:t.tee?.lon,tee_acc:t.tee?.acc,
+    land_lat:t.landing?.lat,land_lon:t.landing?.lon,land_acc:t.landing?.acc,
+    distance_m:t.distance,bearing_deg:t.bearing,
+    temp_c:t.wx?.temp,wind_ms:t.wx?.wind,wind_dir_deg:t.wx?.dir,wind_gust_ms:t.wx?.gust,
+    wx_station:t.wx?.station,wx_dist_m:t.wx?.stDist,
+    peak_rpm:t.peakRPM,peak_g:t.peakG,flight_time_s:t.flightTime,
+    est_speed_ms:t.estSpeed,spin_quality:t.spinQuality,
+    hyzer_deg:t.hyzerAngle,nose_deg:t.noseAngle,
+    throw_type:t.throwType||null,effort:t.effort||null,notes:t.notes||null,
+    mag_rate_hz:t.header?.magHz,imu_rate_hz:t.header?.imuHz,duration_s:t.duration};
+  try{
+    const r=await fetch(SUPA_URL+'/rest/v1/throws',{method:'POST',headers:{
+      'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify(row)});
+    if(r.ok){t.synced=true;renderHist();log('Synced #'+t.id);}
+    else{const e=await r.text();log('Sync fail: '+e);queueSync(row,t.id);}
+  }catch(e){log('Sync offline');queueSync(row,t.id);}
+}
+function queueSync(row,id){syncQueue.push({row,id});localStorage.setItem('dp_queue',JSON.stringify(syncQueue));}
+async function retrySyncQueue(){
+  if(!syncQueue.length)return;const q=[...syncQueue];syncQueue=[];
+  for(const item of q){
+    try{const r=await fetch(SUPA_URL+'/rest/v1/throws',{method:'POST',headers:{
+      'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify(item.row)});
+      if(!r.ok)syncQueue.push(item);
+    }catch(e){syncQueue.push(item);}
   }
-  el.scrollTop=el.scrollHeight;
+  localStorage.setItem('dp_queue',JSON.stringify(syncQueue));
+  if(!syncQueue.length)log('Queue synced!');
 }
-function setLbl(i,k,v){throws[i][k]=v;renderThrows();}
 
-// ── Export ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// HISTORY
+// ═══════════════════════════════════════════════════════════
+function renderHist(){
+  const el=document.getElementById('histList');
+  document.getElementById('syncStatus').textContent=syncQueue.length?syncQueue.length+' pending':'';
+  if(!throws.length){el.innerHTML='<div style="color:var(--mt);text-align:center;padding:.5rem;font-size:.8rem">No throws yet</div>';return;}
+  el.innerHTML=throws.slice().reverse().map((t,i)=>{
+    const idx=throws.length-i;
+    const d=t.distance?t.distance+'m':'--';
+    const sync=t.synced?'<span class="sync-ok">\u2713</span>':'<span class="sync-wait">\u2022</span>';
+    return`<div class="hi" onclick="drawPlot(throws[${throws.length-1-i}])">
+      <span class="num">#${t.id}</span>
+      <span class="det"><strong>${d}</strong> ${t.peakRPM}RPM ${t.peakG}g${t.throwType?' \u2022 '+t.throwType:''}</span>
+      <span class="sync">${sync}</span>
+    </div>`;}).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════════════════
 async function exportSession(){
-  const s={exported:new Date().toISOString(),
-    session:{disc:document.getElementById('sDisc').value,notes:document.getElementById('sNotes').value},
-    throws:throws.map(t=>({
-      id:t.id,time:t.time,duration_s:+t.duration,distance_m:t.distance,bearing_deg:t.bearing,
-      tee:t.tee?{lat:t.tee.lat,lon:t.tee.lon,accuracy_m:t.tee.acc}:null,
-      landing:t.landing?{lat:t.landing.lat,lon:t.landing.lon,accuracy_m:t.landing.acc}:null,
-      weather:t.weather?{temperature_c:t.weather.temp,wind_speed_ms:t.weather.wind,
-        wind_direction_deg:t.weather.windDir,wind_gust_ms:t.weather.gust,
-        station:t.weather.station,station_distance_m:t.weather.stationDist}:null,
-      analysis:{flight_time_s:t.flightTime,release_ms:t.releaseMs,landing_ms:t.landingMs,
-        est_speed_ms:t.estSpeed,spin_quality_pct:t.spinQuality,
-        hyzer_angle_deg:t.hyzerAngle,nose_angle_deg:t.noseAngle},
-      sensor:{mag_rate_hz:t.header.magHz,imu_rate_hz:t.header.imuHz,peak_rpm:t.peakRPM,peak_g:t.peakG,
+  const s={exported:new Date().toISOString(),collector,
+    throws:throws.map(t=>({id:t.id,time:t.time,collector:t.collector,disc:t.disc,duration_s:t.duration,
+      distance_m:t.distance,bearing_deg:t.bearing,
+      tee:t.tee?{lat:t.tee.lat,lon:t.tee.lon,acc:t.tee.acc}:null,
+      landing:t.landing?{lat:t.landing.lat,lon:t.landing.lon,acc:t.landing.acc}:null,
+      weather:t.wx,
+      analysis:{peak_rpm:t.peakRPM,peak_g:t.peakG,flight_time_s:t.flightTime,est_speed_ms:t.estSpeed,
+        spin_quality:t.spinQuality,hyzer_deg:t.hyzerAngle,nose_deg:t.noseAngle,
+        release_ms:t.releaseMs,landing_ms:t.landingMs},
+      labels:{throw_type:t.throwType,effort:t.effort,notes:t.notes},
+      sensor:{mag_rate_hz:t.header.magHz,imu_rate_hz:t.header.imuHz,
         mag:t.magSamples.map(s=>({t:+s.t.toFixed(1),x:+s.x.toFixed(2),y:+s.y.toFixed(2),z:+s.z.toFixed(2)})),
         imu:t.imuSamples.map(s=>({t:+s.t.toFixed(1),ax:+s.ax.toFixed(3),ay:+s.ay.toFixed(3),az:+s.az.toFixed(3),
-          gx:+s.gx.toFixed(3),gy:+s.gy.toFixed(3),gz:+s.gz.toFixed(3)}))},
-      labels:{throw_type:t.throwType,effort:t.effort,notes:t.notes}
+          gx:+s.gx.toFixed(3),gy:+s.gy.toFixed(3),gz:+s.gz.toFixed(3)}))}
     }))};
   const json=JSON.stringify(s,null,2);
-  const fname=`discpuck_${new Date().toISOString().slice(0,10)}_${throws.length}t.json`;
-  // Use native share sheet on iOS (more reliable than blob downloads)
-  try{
-    const file=new File([json],fname,{type:'application/json'});
-    if(navigator.canShare&&navigator.canShare({files:[file]})){
-      await navigator.share({files:[file],title:'DiscPuck Session'});
-      log('Shared '+throws.length+' throws');return;
-    }
-  }catch(e){if(e.name!=='AbortError')log('Share failed: '+e.message);}
-  // Fallback: blob download
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([json],{type:'application/json'}));
-  a.download=fname;a.click();
-  log('Exported '+throws.length+' throws');
+  const fn=`discpuck_${collector}_${new Date().toISOString().slice(0,10)}_${throws.length}t.json`;
+  try{const f=new File([json],fn,{type:'application/json'});
+    if(navigator.canShare?.({files:[f]})){await navigator.share({files:[f]});return;}
+  }catch(e){if(e.name!=='AbortError')log('Share: '+e.message);}
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([json],{type:'application/json'}));a.download=fn;a.click();
 }
 
-async function sendSleep(){
-  if(!ctrlC||!confirm('Power off puck?'))return;
-  await ctrlC.writeValue(new Uint8Array([0x04]));log('Puck sleeping');
-}
+async function sendSleep(){if(!ctrlC)return;await ctrlC.writeValue(new Uint8Array([0x04]));log('Puck off');}
 
-// ── Plot ───────────────────────────────────────────────────
-const canvas=document.getElementById('plot'),ctx=canvas.getContext('2d');
-function resize(){canvas.width=canvas.clientWidth*devicePixelRatio;canvas.height=canvas.clientHeight*devicePixelRatio;}
-resize();window.addEventListener('resize',resize);
+// ═══════════════════════════════════════════════════════════
+// PLOT
+// ═══════════════════════════════════════════════════════════
+const cv=document.getElementById('plot'),cx=cv.getContext('2d');
+function rsz(){cv.width=cv.clientWidth*devicePixelRatio;cv.height=cv.clientHeight*devicePixelRatio;}
+rsz();window.addEventListener('resize',rsz);
 
-function setPlot(m){
-  plotMode=m;
-  document.getElementById('pMag').className=m==='mag'?'sel':'';
-  document.getElementById('pAcc').className=m==='acc'?'sel':'';
-  document.getElementById('pGyr').className=m==='gyr'?'sel':'';
-  if(throws.length)drawPlot(throws[throws.length-1]);
-}
+function setP(m){plotMode=m;
+  document.getElementById('pM').className=m==='mag'?'on':'';
+  document.getElementById('pA').className=m==='acc'?'on':'';
+  document.getElementById('pG').className=m==='gyr'?'on':'';
+  if(lastThrow)drawPlot(lastThrow);}
 
-function plotData(t){
+function pData(t){
   if(plotMode==='acc')return{d:t.imuSamples,g:s=>[s.ax,s.ay,s.az],l:['Ax','Ay','Az'],u:'m/s\u00B2'};
   if(plotMode==='gyr')return{d:t.imuSamples,g:s=>[s.gx,s.gy,s.gz],l:['Gx','Gy','Gz'],u:'rad/s'};
-  return{d:t.magSamples,g:s=>[s.x,s.y,s.z],l:['Mx','My','Mz'],u:'\u00B5T'};
-}
+  return{d:t.magSamples,g:s=>[s.x,s.y,s.z],l:['Mx','My','Mz'],u:'\u00B5T'};}
 
 function drawPlot(t){
-  const W=canvas.width,H=canvas.height,dp=devicePixelRatio;
-  ctx.clearRect(0,0,W,H);
-  const{d,g,l,u}=plotData(t);
-  if(!d||d.length<2)return;
-  const N=d.length;
-  let mn=Infinity,mx=-Infinity;
+  lastThrow=t;
+  const W=cv.width,H=cv.height,dp=devicePixelRatio;cx.clearRect(0,0,W,H);
+  const{d,g,l,u}=pData(t);if(!d||d.length<2)return;
+  const N=d.length;let mn=Infinity,mx=-Infinity;
   for(const s of d)for(const v of g(s)){if(v<mn)mn=v;if(v>mx)mx=v;}
-  const rng=Math.max(mx-mn,0.1);mn-=rng*.1;mx+=rng*.1;
-  ctx.strokeStyle='#30363d';ctx.lineWidth=1;
-  for(let i=0;i<=4;i++){const y=i/4*H;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
-  const cols=['#f85149','#3fb950','#58a6ff'];
-  const step=Math.max(1,Math.floor(N/(W/dp)));
-  const tEnd=d[N-1].t||1;
-  for(let a=0;a<3;a++){ctx.strokeStyle=cols[a];ctx.lineWidth=1*dp;ctx.beginPath();
-    for(let i=0;i<N;i+=step){const v=g(d[i])[a];const x=((d[i].t||0)/tEnd)*W,y=H-((v-mn)/(mx-mn))*H;
-      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}ctx.stroke();}
-  ctx.font=`bold ${10*dp}px monospace`;
-  for(let a=0;a<3;a++){ctx.fillStyle=cols[a];ctx.fillText(l[a],W-75*dp+a*24*dp,13*dp);}
-  // Release & landing markers
-  if(t.releaseMs!=null&&tEnd>0){
-    const rx=(t.releaseMs/tEnd)*W;
-    ctx.strokeStyle='#d29922';ctx.lineWidth=2*dp;ctx.setLineDash([4*dp,4*dp]);
-    ctx.beginPath();ctx.moveTo(rx,0);ctx.lineTo(rx,H);ctx.stroke();ctx.setLineDash([]);
-    ctx.fillStyle='#d29922';ctx.font=`${9*dp}px sans-serif`;ctx.fillText('RELEASE',rx+3,H-16*dp);
-  }
-  if(t.landingMs!=null&&tEnd>0){
-    const lx=(t.landingMs/tEnd)*W;
-    ctx.strokeStyle='#f85149';ctx.lineWidth=2*dp;ctx.setLineDash([4*dp,4*dp]);
-    ctx.beginPath();ctx.moveTo(lx,0);ctx.lineTo(lx,H);ctx.stroke();ctx.setLineDash([]);
-    ctx.fillStyle='#f85149';ctx.font=`${9*dp}px sans-serif`;ctx.fillText('LAND',lx+3,H-16*dp);
-  }
-  const dStr=t.distance?` ${t.distance}m`:'';
-  const sqStr=t.spinQuality!=null?' spin'+t.spinQuality+'%':'';
-  ctx.fillStyle='#e6edf3';ctx.font=`bold ${10*dp}px sans-serif`;
-  ctx.fillText(`#${t.id}${dStr} ~${t.peakRPM}RPM ${t.peakG}g${sqStr} [${u}]`,4,13*dp);
+  const rng=Math.max(mx-mn,.1);mn-=rng*.1;mx+=rng*.1;
+  cx.strokeStyle='#1e293b';cx.lineWidth=1;
+  for(let i=0;i<=4;i++){const y=i/4*H;cx.beginPath();cx.moveTo(0,y);cx.lineTo(W,y);cx.stroke();}
+  const cols=['#ef4444','#22c55e','#3b82f6'],step=Math.max(1,Math.floor(N/(W/dp))),tE=d[N-1].t||1;
+  for(let a=0;a<3;a++){cx.strokeStyle=cols[a];cx.lineWidth=1.2*dp;cx.beginPath();
+    for(let i=0;i<N;i+=step){const v=g(d[i])[a],x=((d[i].t||0)/tE)*W,y=H-((v-mn)/(mx-mn))*H;
+      i===0?cx.moveTo(x,y):cx.lineTo(x,y);}cx.stroke();}
+  // Markers
+  if(t.releaseMs!=null){const x=(t.releaseMs/tE)*W;cx.strokeStyle='#f59e0b';cx.lineWidth=1.5*dp;
+    cx.setLineDash([3*dp,3*dp]);cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,H);cx.stroke();cx.setLineDash([]);}
+  if(t.landingMs!=null){const x=(t.landingMs/tE)*W;cx.strokeStyle='#ef4444';cx.lineWidth=1.5*dp;
+    cx.setLineDash([3*dp,3*dp]);cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,H);cx.stroke();cx.setLineDash([]);}
+  cx.font=`bold ${9*dp}px monospace`;for(let a=0;a<3;a++){cx.fillStyle=cols[a];cx.fillText(l[a],W-70*dp+a*22*dp,12*dp);}
+  cx.fillStyle='#94a3b8';cx.font=`${9*dp}px sans-serif`;cx.fillText(`#${t.id} [${u}]`,4,12*dp);
 }
 
-// ── Live render during dump ────────────────────────────────
+// Live render
 function renderLoop(){
-  if(hdr){
-    let data,gv;
-    if(plotMode==='acc'&&rxImu.length>2){data=rxImu;gv=s=>[s.ax,s.ay,s.az];}
-    else if(plotMode==='gyr'&&rxImu.length>2){data=rxImu;gv=s=>[s.gx,s.gy,s.gz];}
-    else if(rxMag.length>2){data=rxMag;gv=s=>[s.x,s.y,s.z];}
-    if(data&&data.length>2){
-      const W=canvas.width,H=canvas.height,dp=devicePixelRatio;
-      ctx.clearRect(0,0,W,H);
-      let mn=Infinity,mx=-Infinity;
-      for(const s of data)for(const v of gv(s)){if(v<mn)mn=v;if(v>mx)mx=v;}
-      const rng=Math.max(mx-mn,0.1);mn-=rng*.1;mx+=rng*.1;
-      const cols=['#f85149','#3fb950','#58a6ff'],N=data.length;
-      const step=Math.max(1,Math.floor(N/(W/dp)));
-      for(let a=0;a<3;a++){ctx.strokeStyle=cols[a];ctx.lineWidth=1*dp;ctx.beginPath();
-        for(let i=0;i<N;i+=step){const v=gv(data[i])[a];const x=i/(N-1)*W,y=H-((v-mn)/(mx-mn))*H;
-          i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}ctx.stroke();}
-      ctx.fillStyle='#d29922';ctx.font=`bold ${11*dp}px sans-serif`;
+  if(hdr&&(rxMag.length>2||rxImu.length>2)){
+    let d,gv;
+    if(plotMode==='acc'&&rxImu.length>2){d=rxImu;gv=s=>[s.ax,s.ay,s.az];}
+    else if(plotMode==='gyr'&&rxImu.length>2){d=rxImu;gv=s=>[s.gx,s.gy,s.gz];}
+    else if(rxMag.length>2){d=rxMag;gv=s=>[s.x,s.y,s.z];}
+    if(d){const W=cv.width,H=cv.height,dp=devicePixelRatio;cx.clearRect(0,0,W,H);
+      let mn=Infinity,mx=-Infinity;for(const s of d)for(const v of gv(s)){if(v<mn)mn=v;if(v>mx)mx=v;}
+      const rng=Math.max(mx-mn,.1);mn-=rng*.1;mx+=rng*.1;
+      const cols=['#ef4444','#22c55e','#3b82f6'],N=d.length,step=Math.max(1,Math.floor(N/(W/dp)));
+      for(let a=0;a<3;a++){cx.strokeStyle=cols[a];cx.lineWidth=1.2*dp;cx.beginPath();
+        for(let i=0;i<N;i+=step){const v=gv(d[i])[a],x=i/(N-1)*W,y=H-((v-mn)/(mx-mn))*H;
+          i===0?cx.moveTo(x,y):cx.lineTo(x,y);}cx.stroke();}
+      cx.fillStyle='#f59e0b';cx.font=`bold ${10*dp}px sans-serif`;
       const tot=hdr.magN+hdr.imuN,got=rxMag.length+rxImu.length;
-      ctx.fillText(`Receiving: ${got}/${tot}`,4,13*dp);
+      cx.fillText(`Receiving ${Math.floor(got/tot*100)}%`,4,12*dp);
     }
   }
   requestAnimationFrame(renderLoop);
 }
 renderLoop();
 
-// ── Utilities ──────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// GEO
+// ═══════════════════════════════════════════════════════════
+function haversine(a,b,c,d){const R=6371000,dr=Math.PI/180,dL=(c-a)*dr,dN=(d-b)*dr;
+  const x=Math.sin(dL/2)**2+Math.cos(a*dr)*Math.cos(c*dr)*Math.sin(dN/2)**2;return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));}
+function bearing(a,b,c,d){const dr=Math.PI/180,dL=(d-b)*dr;
+  return(Math.atan2(Math.sin(dL)*Math.cos(c*dr),Math.cos(a*dr)*Math.sin(c*dr)-Math.sin(a*dr)*Math.cos(c*dr)*Math.cos(dL))*180/Math.PI+360)%360;}
+
+// ═══════════════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════════════
 function log(m){const e=document.getElementById('log');
   e.innerHTML+=`<div>[${new Date().toLocaleTimeString()}] ${m}</div>`;e.scrollTop=e.scrollHeight;}
 
-// ── Init ───────────────────────────────────────────────────
-startGPS();
-setAction('setup');
-renderCalStatus();
-if(cal)log('Calibration loaded from '+cal.date.slice(0,10));
-if(!navigator.bluetooth)log('Web Bluetooth not available. Use Bluefy browser on iOS.');
-
-// PWA
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+checkOnboard();startGPS();setPhase('setup');renderCal();renderHist();
+retrySyncQueue();
+if(!navigator.bluetooth)log('No Web Bluetooth. Use Bluefy on iOS.');
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>
