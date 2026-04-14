@@ -204,7 +204,7 @@ canvas{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);wi
 // ═══════════════════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════════════════
-const BUILD='cd0a002 | shared time axis for mag/imu alignment';
+const BUILD='fddbe40 | gyro thresh 20% for full flight arc';
 const SUPA_URL='https://fjptyllozsmlhxpahocd.supabase.co';
 const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqcHR5bGxvenNtbGh4cGFob2NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzA1NjMsImV4cCI6MjA5MTc0NjU2M30.Zx3kn4TBpGFjDfSeNgUHq86FAaNtNNFV-1F1g9b0Ynk';
 const BLE_SVC='19b10000-e8f2-537e-4f6c-d104768a1214';
@@ -496,8 +496,9 @@ function analyzeThrow(t){
   const spinVals=imu.map(s=>Math.abs(s[spinKey]));
   let spinMax=0;for(const v of spinVals)if(v>spinMax)spinMax=v;
 
-  // Adaptive threshold: 40% of peak spin rate (works for gentle and hard throws)
-  const SPIN_THRESH=Math.max(spinMax*0.4, 3); // minimum 3 rad/s to avoid noise
+  // Adaptive threshold: 20% of peak spin rate — captures full flight arc including
+  // deceleration phase (40% was too tight, gave 0.4s instead of 2-3s flight times)
+  const SPIN_THRESH=Math.max(spinMax*0.2, 2); // minimum 2 rad/s to avoid noise
   let relIdx=-1,landIdx=-1;
   for(let i=0;i<spinVals.length;i++){if(spinVals[i]>SPIN_THRESH){relIdx=i;break;}}
   for(let i=spinVals.length-1;i>=0;i--){if(spinVals[i]>SPIN_THRESH){landIdx=i;break;}}
