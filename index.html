@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="manifest.json">
 <title>DiscPuck</title>
@@ -254,7 +254,7 @@ function startCalibration(){
   if(!ctrlC){alert('Connect to the puck first!');return;}
   alert('Place disc FLAT on a level surface.\n\nCalibration starts when you dismiss this.');
   calibrating=true; hdr=null; rxMag=[]; rxImu=[];
-  setBigState('armed','CALIBRATING \u2014 recording 2 seconds...');
+  const bs=document.getElementById('bigState');bs.textContent='CALIBRATING \u2014 recording 2 seconds...';bs.className='big-state armed';
   log('Calibrating... sending ARM');
   ctrlC.writeValue(new Uint8Array([0x01])).then(()=>{
     log('ARM sent, waiting 2.5s...');
@@ -283,7 +283,7 @@ function finishCalibration(){
   hdr=null;rxMag=[];rxImu=[];
   renderCalStatus();
   setAction('ready');
-  setBigState('idle','Calibration saved!');
+  const bs2=document.getElementById('bigState');bs2.textContent='Calibration saved!';bs2.className='big-state done';
   alert('Calibration saved!\n\nSensor tilt from disc: '+tilt.toFixed(1)+'\u00B0\n|g| = '+gmag.toFixed(2)+' m/s\u00B2\nIMU samples: '+n);
 }
 
