@@ -254,7 +254,8 @@ function startCalibration(){
   if(!ctrlC){alert('Connect to the puck first!');return;}
   alert('Place disc FLAT on a level surface.\n\nCalibration starts when you dismiss this.');
   calibrating=true; hdr=null; rxMag=[]; rxImu=[];
-  const bs=document.getElementById('bigState');bs.textContent='CALIBRATING \u2014 recording 2 seconds...';bs.className='big-state armed';
+  document.getElementById('actionBtn').textContent='CALIBRATING...';document.getElementById('actionBtn').className='btn-dumping';
+  document.getElementById('actionHint').textContent='Recording 2 seconds of rest data...';
   log('Calibrating... sending ARM');
   ctrlC.writeValue(new Uint8Array([0x01])).then(()=>{
     log('ARM sent, waiting 2.5s...');
@@ -283,7 +284,7 @@ function finishCalibration(){
   hdr=null;rxMag=[];rxImu=[];
   renderCalStatus();
   setAction('ready');
-  const bs2=document.getElementById('bigState');bs2.textContent='Calibration saved!';bs2.className='big-state done';
+  document.getElementById('actionBtn').textContent='CALIBRATED';document.getElementById('actionBtn').className='btn-next';
   alert('Calibration saved!\n\nSensor tilt from disc: '+tilt.toFixed(1)+'\u00B0\n|g| = '+gmag.toFixed(2)+' m/s\u00B2\nIMU samples: '+n);
 }
 
