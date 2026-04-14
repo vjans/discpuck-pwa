@@ -7,19 +7,41 @@
 <h2>Minimal BLE Test</h2>
 <p id="info">Tap the button below.</p>
 <button onclick="test()" style="font-size:24px;padding:20px 40px">SCAN BLE</button>
+<button onclick="testName()" style="font-size:24px;padding:20px 40px">SCAN "DiscPuck"</button>
+<button onclick="testPrefix()" style="font-size:24px;padding:20px 40px">SCAN "Disc*"</button>
+<button onclick="testService()" style="font-size:24px;padding:20px 40px">SCAN by SERVICE</button>
 <pre id="log" style="white-space:pre-wrap;font-size:14px"></pre>
 <script>
 function l(m){document.getElementById('log').textContent+=m+'\n';}
 l('bluetooth API: '+(navigator.bluetooth?'YES':'NO'));
 
 async function test(){
-  l('Requesting device...');
+  l('Scan ALL...');
   try{
-    const d=await navigator.bluetooth.requestDevice({acceptAllDevices:true});
-    l('Found: '+d.name+' ('+d.id+')');
-  }catch(e){
-    l('Error: '+e.name+': '+e.message);
-  }
+    const d=await navigator.bluetooth.requestDevice({acceptAllDevices:true,optionalServices:['19b10000-e8f2-537e-4f6c-d104768a1214']});
+    l('Found: "'+d.name+'" ('+d.id+')');
+  }catch(e){l('Error: '+e.message);}
+}
+async function testName(){
+  l('Scan name=DiscPuck...');
+  try{
+    const d=await navigator.bluetooth.requestDevice({filters:[{name:'DiscPuck'}],optionalServices:['19b10000-e8f2-537e-4f6c-d104768a1214']});
+    l('Found: "'+d.name+'"');
+  }catch(e){l('Error: '+e.message);}
+}
+async function testPrefix(){
+  l('Scan namePrefix=Disc...');
+  try{
+    const d=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'Disc'}],optionalServices:['19b10000-e8f2-537e-4f6c-d104768a1214']});
+    l('Found: "'+d.name+'"');
+  }catch(e){l('Error: '+e.message);}
+}
+async function testService(){
+  l('Scan by service UUID...');
+  try{
+    const d=await navigator.bluetooth.requestDevice({filters:[{services:['19b10000-e8f2-537e-4f6c-d104768a1214']}]});
+    l('Found: "'+d.name+'"');
+  }catch(e){l('Error: '+e.message);}
 }
 </script>
 </body>
