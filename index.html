@@ -478,23 +478,22 @@ function analyzeThrow(t){
   const imu=t.imuSamples,mag=t.magSamples;
   if(imu.length<20||mag.length<50)return;
   const iDt=1000/t.header.imuHz,mDt=1000/t.header.magHz;
-  const gA=imu.map(s=>Math.sqrt(s.ax*s.ax+s.ay*s.ay+s.az*s.az)/9.81);
+  // Per-axis max: use the highest absolute value across all 3 accel axes per sample
+  // (catches throws where only one axis spikes)
+  const peakA=imu.map(s=>Math.max(Math.abs(s.ax),Math.abs(s.ay),Math.abs(s.az))/9.81);
 
-  // ── Find two biggest accel peaks (throw + landing) ──
-  // Peak 1: global max
+  // ── Find two biggest peaks at least 0.5s apart ──
   let p1=0;
-  for(let i=1;i<gA.length;i++)if(gA[i]>gA[p1])p1=i;
+  for(let i=1;i<peakA.length;i++)if(peakA[i]>peakA[p1])p1=i;
 
-  // Peak 2: highest point at least 0.3s away from peak 1
-  const minSep=Math.floor(0.3*t.header.imuHz);
-  let p2=-1,p2g=0;
-  for(let i=0;i<gA.length;i++){
-    if(Math.abs(i-p1)>=minSep&&gA[i]>p2g){p2g=gA[i];p2=i;}
+  const minSep=Math.floor(0.5*t.header.imuHz);
+  let p2=-1,p2v=0;
+  for(let i=0;i<peakA.length;i++){
+    if(Math.abs(i-p1)>=minSep&&peakA[i]>p2v){p2v=peakA[i];p2=i;}
   }
 
-  // Release = earlier peak, Landing = later peak
-  // Second peak must be above 2g to count as real impact
-  if(p2<0||p2g<2)p2=-1;
+  // Second peak must be above 2g to count
+  if(p2<0||p2v<2)p2=-1;
   let relIdx,landIdx;
   if(p2>=0){relIdx=Math.min(p1,p2);landIdx=Math.max(p1,p2);}
   else{relIdx=p1;landIdx=-1;}
