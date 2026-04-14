@@ -407,17 +407,7 @@ function finishThrow(){
   for(let i=0;i<rxMag.length;i++)rxMag[i].t=i*mDt;
   for(let i=0;i<rxImu.length;i++)rxImu[i].t=i*iDt;
 
-  // FFT
-  let rpm=0;const N=rxMag.length;
-  if(N>=64){const fN=Math.min(1024,2**Math.floor(Math.log2(N)));
-    const mid=Math.floor(N/2),st=Math.max(0,mid-Math.floor(fN/2));
-    const w=rxMag.slice(st,st+fN),sr=hdr.magHz,sig=w.map(s=>s.x);
-    const mn=sig.reduce((a,b)=>a+b,0)/sig.length;
-    const h=sig.map((v,i)=>(v-mn)*.5*(1-Math.cos(2*Math.PI*i/(sig.length-1))));
-    const m=fft(h),fR=sr/fN;let pB=1,pM=0;
-    for(let k=Math.max(1,Math.floor(.5/fR));k<Math.min(m.length-1,Math.floor(sr/2/fR));k++)if(m[k]>pM){pM=m[k];pB=k;}
-    rpm=Math.round(pB*fR*60);}
-
+  let rpm=0; // computed after analyzeThrow using flight segment
   let peakG=0;for(const s of rxImu){const g=Math.sqrt(s.ax*s.ax+s.ay*s.ay+s.az*s.az)/9.81;if(g>peakG)peakG=g;}
   const land=window._land||null;
   let dist=null,bear=null;
@@ -432,6 +422,22 @@ function finishThrow(){
     throwType:'',effort:'',notes:'',synced:false};
 
   analyzeThrow(t);
+
+  // FFT on flight segment only (where mag oscillation = disc spinning)
+  const mDt2=1000/t.header.magHz;
+  const fftStart=t.releaseMs!=null?Math.floor(t.releaseMs/mDt2):0;
+  const fftEnd=t.landingMs!=null?Math.floor(t.landingMs/mDt2):t.magSamples.length;
+  const flightMag=t.magSamples.slice(fftStart,fftEnd);
+  if(flightMag.length>=64){
+    const fN=Math.min(1024,2**Math.floor(Math.log2(flightMag.length)));
+    const sr=t.header.magHz,sig=flightMag.slice(0,fN).map(s=>s.x);
+    const mn=sig.reduce((a,b)=>a+b,0)/sig.length;
+    const h=sig.map((v,i)=>(v-mn)*.5*(1-Math.cos(2*Math.PI*i/(sig.length-1))));
+    const m=fft(h),fR=sr/fN;let pB=1,pM=0;
+    for(let k=Math.max(1,Math.floor(.5/fR));k<Math.min(m.length-1,Math.floor(sr/2/fR));k++)if(m[k]>pM){pM=m[k];pB=k;}
+    t.peakRPM=Math.round(pB*fR*60);
+  }
+
   throws.push(t);lastThrow=t;
   hdr=null;rxMag=[];rxImu=[];window._land=null;
   updateMetrics(t);setPhase('done');renderHist();drawPlot(t);
@@ -508,7 +514,11 @@ function analyzeThrow(t){
   let fx=pk.ax-pdn*N_.x,fy=pk.ay-pdn*N_.y,fz=pk.az-pdn*N_.z;
   const fm2=Math.sqrt(fx*fx+fy*fy+fz*fz);if(fm2<.1)return;fx/=fm2;fy/=fm2;fz/=fm2;
   const lx=N_.y*fz-N_.z*fy,ly=N_.z*fx-N_.x*fz,lz=N_.x*fy-N_.y*fx;
-  const ri=Math.floor(t.releaseMs/iDt),win=imu.slice(ri,ri+5);if(win.length<3)return;
+  // Sample 0.3-0.5s into flight (past release transient, stable aero forces)
+  const flightOffset=Math.floor(0.3*t.header.imuHz); // 30 samples at 100Hz
+  const ri=Math.floor(t.releaseMs/iDt)+flightOffset;
+  if(ri+10>=imu.length)return;
+  const win=imu.slice(ri,ri+10);if(win.length<5)return;
   let ux=0,uy=0,uz=0;for(const s of win){ux+=s.ax;uy+=s.ay;uz+=s.az;}
   ux/=win.length;uy/=win.length;uz/=win.length;
   const um=Math.sqrt(ux*ux+uy*uy+uz*uz);if(um<.1)return;ux/=um;uy/=um;uz/=um;
