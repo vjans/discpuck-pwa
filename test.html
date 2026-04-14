@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BLE Test</title>
+</head>
+<body style="font-family:sans-serif;padding:20px;font-size:18px">
+<h2>Minimal BLE Test</h2>
+<p id="info">Tap the button below.</p>
+<button onclick="test()" style="font-size:24px;padding:20px 40px">SCAN BLE</button>
+<pre id="log" style="white-space:pre-wrap;font-size:14px"></pre>
+<script>
+function l(m){document.getElementById('log').textContent+=m+'\n';}
+l('bluetooth API: '+(navigator.bluetooth?'YES':'NO'));
+
+async function test(){
+  l('Requesting device...');
+  try{
+    const d=await navigator.bluetooth.requestDevice({acceptAllDevices:true});
+    l('Found: '+d.name+' ('+d.id+')');
+  }catch(e){
+    l('Error: '+e.name+': '+e.message);
+  }
+}
+</script>
+</body>
+</html>
