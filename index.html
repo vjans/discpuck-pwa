@@ -204,7 +204,7 @@ canvas{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);wi
 // ═══════════════════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════════════════
-const BUILD='gyro flight detect + per-axis accel | Apr 14 23:50';
+const BUILD='adaptive gyro threshold (40% of peak) | Apr 15 00:15';
 const SUPA_URL='https://fjptyllozsmlhxpahocd.supabase.co';
 const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqcHR5bGxvenNtbGh4cGFob2NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzA1NjMsImV4cCI6MjA5MTc0NjU2M30.Zx3kn4TBpGFjDfSeNgUHq86FAaNtNNFV-1F1g9b0Ynk';
 const BLE_SVC='19b10000-e8f2-537e-4f6c-d104768a1214';
@@ -480,22 +480,23 @@ function analyzeThrow(t){
   const imu=t.imuSamples,mag=t.magSamples;
   if(imu.length<20||mag.length<50)return;
   const iDt=1000/t.header.imuHz,mDt=1000/t.header.magHz;
-  // ── Find flight via gyro saturation ──
-  // Auto-detect spin axis (whichever gyro axis has the highest sustained value)
+  // ── Find flight via gyro spin-up / spin-down ──
+  // Auto-detect spin axis (whichever gyro axis has the highest peak)
   let gxM=0,gyM=0,gzM=0;
   for(const s of imu){const ax=Math.abs(s.gx),ay=Math.abs(s.gy),az=Math.abs(s.gz);
     if(ax>gxM)gxM=ax;if(ay>gyM)gyM=ay;if(az>gzM)gzM=az;}
   const spinVals=gzM>=gyM&&gzM>=gxM?imu.map(s=>Math.abs(s.gz)):
     gyM>=gxM?imu.map(s=>Math.abs(s.gy)):imu.map(s=>Math.abs(s.gx));
+  const spinMax=Math.max(gxM,gyM,gzM);
 
-  // Flight = where spin axis gyro exceeds threshold (disc spinning fast)
-  const SPIN_THRESH=20; // rad/s (~1150 dps) - well above hand movement, catches even slow throws
+  // Adaptive threshold: 40% of peak spin rate (works for gentle and hard throws)
+  const SPIN_THRESH=Math.max(spinMax*0.4, 3); // minimum 3 rad/s to avoid noise
   let relIdx=-1,landIdx=-1;
   for(let i=0;i<spinVals.length;i++){if(spinVals[i]>SPIN_THRESH){relIdx=i;break;}}
   for(let i=spinVals.length-1;i>=0;i--){if(spinVals[i]>SPIN_THRESH){landIdx=i;break;}}
 
-  // Need at least 100ms of flight
-  if(relIdx<0||landIdx<0||landIdx-relIdx<Math.floor(0.1*t.header.imuHz)){relIdx=0;landIdx=-1;}
+  // Need at least 50ms of flight
+  if(relIdx<0||landIdx<0||landIdx-relIdx<Math.floor(0.05*t.header.imuHz)){relIdx=0;landIdx=-1;}
 
   t.releaseMs=+(relIdx*iDt).toFixed(0);
   t.landingMs=landIdx>=0?+(landIdx*iDt).toFixed(0):null;
