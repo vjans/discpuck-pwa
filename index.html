@@ -107,6 +107,12 @@ details summary{color:var(--bl);font-weight:600;font-size:0.85rem;cursor:pointer
 
 <!-- Settings -->
 <details class="bar" style="margin-top:0.4rem">
+  <summary>Sensor Calibration</summary>
+  <div id="calStatus" style="font-size:0.8rem;color:var(--mt);margin-bottom:0.3rem">Not calibrated</div>
+  <div style="font-size:0.75rem;color:var(--mt);margin-bottom:0.3rem">Place disc flat on a level surface, then tap Calibrate. This measures the sensor's mounting angle.</div>
+  <button style="background:var(--or);color:#000;font-size:0.85rem;padding:0.4rem 1rem" onclick="startCalibration()">Calibrate</button>
+</details>
+<details class="bar" style="margin-top:0.4rem">
   <summary>Session Settings</summary>
   <div class="form-row"><label>Disc</label><input type="text" id="sDisc" value="Discmania Genius"></div>
   <div class="form-row"><label>Notes</label><input type="text" id="sNotes" placeholder="Session notes"></div>
@@ -127,6 +133,11 @@ let device=null,dataC=null,ctrlC=null,statC=null;
 let tee=null, currentPos=null, weather=null;
 let throws=[], plotMode='mag';
 let hdr=null, rxMag=[], rxImu=[];
+let calibrating=false;
+
+// ── Calibration (persistent) ──────────────────────────────
+let cal=null;
+try{cal=JSON.parse(localStorage.getItem('discpuck_cal'));}catch(e){}
 
 // ── GPS ────────────────────────────────────────────────────
 const gpsHist=[];
@@ -238,6 +249,46 @@ async function bleRequestDump(){
   await ctrlC.writeValue(new Uint8Array([0x03]));
 }
 
+// ── Calibration ────────────────────────────────────────────
+async function startCalibration(){
+  if(!ctrlC){log('Connect to puck first');return;}
+  calibrating=true; hdr=null; rxMag=[]; rxImu=[];
+  setBigState('armed','CALIBRATING \u2014 disc must be flat on a level surface!');
+  await ctrlC.writeValue(new Uint8Array([0x01])); // ARM
+  log('Calibrating... recording 2s of rest data');
+  setTimeout(async()=>{
+    if(calibrating&&ctrlC){try{await ctrlC.writeValue(new Uint8Array([0x03]));}catch(e){}}
+  },2000);
+}
+
+function finishCalibration(){
+  calibrating=false;
+  if(rxImu.length<10){log('Calibration failed: too few samples');setAction('ready');return;}
+  let sx=0,sy=0,sz=0;
+  for(const s of rxImu){sx+=s.ax;sy+=s.ay;sz+=s.az;}
+  const n=rxImu.length;
+  cal={gx:sx/n,gy:sy/n,gz:sz/n,date:new Date().toISOString()};
+  localStorage.setItem('discpuck_cal',JSON.stringify(cal));
+  const mag=Math.sqrt(cal.gx*cal.gx+cal.gy*cal.gy+cal.gz*cal.gz);
+  log(`Calibrated! g=[${cal.gx.toFixed(3)}, ${cal.gy.toFixed(3)}, ${cal.gz.toFixed(3)}] |g|=${mag.toFixed(2)}`);
+  hdr=null;rxMag=[];rxImu=[];
+  renderCalStatus();
+  setAction('ready');
+  setBigState('idle','Calibration saved! Ready to throw.');
+}
+
+function renderCalStatus(){
+  const el=document.getElementById('calStatus');
+  if(cal){
+    const mag=Math.sqrt(cal.gx*cal.gx+cal.gy*cal.gy+cal.gz*cal.gz);
+    // Compute mounting tilt from pure Z-axis
+    const tilt=Math.acos(Math.abs(cal.gz)/mag)*180/Math.PI;
+    el.innerHTML=`<span style="color:var(--gn)">\u2713 Calibrated</span> (${cal.date.slice(0,10)}) | sensor tilt: ${tilt.toFixed(1)}\u00B0`;
+  }else{
+    el.textContent='Not calibrated \u2014 angle estimates will be unavailable';
+  }
+}
+
 // ── Data handler ───────────────────────────────────────────
 function onData(e){
   const b=e.target.value,len=b.byteLength;
@@ -266,7 +317,7 @@ function onData(e){
 function onStatus(e){
   const b=e.target.value;if(b.byteLength<5)return;
   const st=b.getUint8(0);
-  if(st===3)finishThrow(); // DONE
+  if(st===3){if(calibrating)finishCalibration();else finishThrow();} // DONE
 }
 
 // ── Action state machine ───────────────────────────────────
@@ -381,7 +432,8 @@ function finishThrow(){
     duration:durS.toFixed(1), peakRPM, peakG:+peakG.toFixed(1),
     throwType:'',effort:'',flightShape:'',notes:'',
     // Computed by analyzeThrow:
-    releaseMs:null,landingMs:null,flightTime:null,estSpeed:null,spinQuality:null
+    releaseMs:null,landingMs:null,flightTime:null,estSpeed:null,spinQuality:null,
+    noseAngle:null,hyzerAngle:null
   };
   analyzeThrow(t);
   throws.push(t);
@@ -398,6 +450,8 @@ function finishThrow(){
   parts.push('~'+peakRPM+' RPM');
   parts.push(t.peakG+'g');
   if(t.flightTime)parts.push('flight '+t.flightTime+'s');
+  if(t.hyzerAngle!=null)parts.push('hyzer '+t.hyzerAngle+'\u00B0');
+  if(t.noseAngle!=null)parts.push('nose '+t.noseAngle+'\u00B0');
   if(t.spinQuality!=null)parts.push('spin '+t.spinQuality+'%');
   const summary=parts.join(' | ');
   log(summary);
@@ -464,6 +518,45 @@ function analyzeThrow(t){
     for(let k=Math.max(1,spinBin-2);k<=Math.min(mags.length-1,spinBin+2);k++)peakE+=mags[k]*mags[k];
     t.spinQuality=totalE>0?Math.round(peakE/totalE*100):0;
   }
+
+  // ── Hyzer & nose angle (requires calibration) ───────
+  if(!cal)return;
+  const cmag=Math.sqrt(cal.gx*cal.gx+cal.gy*cal.gy+cal.gz*cal.gz);
+  if(cmag<0.1)return;
+  // Disc normal from calibration (gravity direction when disc is flat)
+  const N={x:cal.gx/cmag,y:cal.gy/cmag,z:cal.gz/cmag};
+
+  // Forward = throw direction from peak accel, projected into disc plane
+  const pk=imu[peakIdx];
+  const pDotN=pk.ax*N.x+pk.ay*N.y+pk.az*N.z;
+  let fx=pk.ax-pDotN*N.x, fy=pk.ay-pDotN*N.y, fz=pk.az-pDotN*N.z;
+  const fm=Math.sqrt(fx*fx+fy*fy+fz*fz);
+  if(fm<0.1)return;
+  fx/=fm;fy/=fm;fz/=fm;
+
+  // Lateral = disc_normal x forward
+  const lx=N.y*fz-N.z*fy, ly=N.z*fx-N.x*fz, lz=N.x*fy-N.y*fx;
+
+  // "Up" from accel just after release (avg 50ms window)
+  const ri=Math.floor(t.releaseMs/imuDt);
+  const win=imu.slice(ri,ri+5);
+  if(win.length<3)return;
+  let ux=0,uy=0,uz=0;
+  for(const s of win){ux+=s.ax;uy+=s.ay;uz+=s.az;}
+  ux/=win.length;uy/=win.length;uz/=win.length;
+  const um=Math.sqrt(ux*ux+uy*uy+uz*uz);
+  if(um<0.1)return;
+  ux/=um;uy/=um;uz/=um;
+
+  // Decompose "up" into disc frame {N, F, L}
+  const uN=ux*N.x+uy*N.y+uz*N.z;
+  const uF=ux*fx+uy*fy+uz*fz;
+  const uL=ux*lx+uy*ly+uz*lz;
+
+  // Nose: positive = nose up (leading edge above trailing)
+  t.noseAngle=+(-Math.atan2(uF,uN)*180/Math.PI).toFixed(1);
+  // Hyzer: positive = hyzer (outer edge down for RHBH)
+  t.hyzerAngle=+(Math.atan2(uL,uN)*180/Math.PI).toFixed(1);
 }
 
 // ── Geo utils ──────────────────────────────────────────────
@@ -489,7 +582,9 @@ function renderThrows(){
     const spd=t.estSpeed?`${t.estSpeed}m/s`:'';
     const fl=t.flightTime?`fly${t.flightTime}s`:'';
     const sq=t.spinQuality!=null?`spin${t.spinQuality}%`:'';
-    const parts=[d,`${t.peakRPM}RPM`,`${t.peakG}g`,spd,fl,sq].filter(Boolean).join(' | ');
+    const hy=t.hyzerAngle!=null?`H${t.hyzerAngle}\u00B0`:'';
+    const no=t.noseAngle!=null?`N${t.noseAngle}\u00B0`:'';
+    const parts=[d,`${t.peakRPM}RPM`,`${t.peakG}g`,spd,fl,hy,no,sq].filter(Boolean).join(' | ');
     return`<div class="ti">
       <div class="hd"><strong>#${t.id}</strong> <span style="font-size:0.75rem">${parts}</span>
         <button style="font-size:0.65rem;padding:0.1rem 0.3rem;background:var(--bd);color:var(--mt);border:none;border-radius:3px"
@@ -523,7 +618,8 @@ async function exportSession(){
         wind_direction_deg:t.weather.windDir,wind_gust_ms:t.weather.gust,
         station:t.weather.station,station_distance_m:t.weather.stationDist}:null,
       analysis:{flight_time_s:t.flightTime,release_ms:t.releaseMs,landing_ms:t.landingMs,
-        est_speed_ms:t.estSpeed,spin_quality_pct:t.spinQuality},
+        est_speed_ms:t.estSpeed,spin_quality_pct:t.spinQuality,
+        hyzer_angle_deg:t.hyzerAngle,nose_angle_deg:t.noseAngle},
       sensor:{mag_rate_hz:t.header.magHz,imu_rate_hz:t.header.imuHz,peak_rpm:t.peakRPM,peak_g:t.peakG,
         mag:t.magSamples.map(s=>({t:+s.t.toFixed(1),x:+s.x.toFixed(2),y:+s.y.toFixed(2),z:+s.z.toFixed(2)})),
         imu:t.imuSamples.map(s=>({t:+s.t.toFixed(1),ax:+s.ax.toFixed(3),ay:+s.ay.toFixed(3),az:+s.az.toFixed(3),
@@ -643,6 +739,8 @@ function log(m){const e=document.getElementById('log');
 // ── Init ───────────────────────────────────────────────────
 startGPS();
 setAction('setup');
+renderCalStatus();
+if(cal)log('Calibration loaded from '+cal.date.slice(0,10));
 if(!navigator.bluetooth)log('Web Bluetooth not available. Use Bluefy browser on iOS.');
 
 // PWA
