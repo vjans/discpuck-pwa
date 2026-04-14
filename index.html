@@ -251,30 +251,40 @@ async function bleRequestDump(){
 
 // ── Calibration ────────────────────────────────────────────
 async function startCalibration(){
-  if(!ctrlC){log('Connect to puck first');return;}
+  if(!ctrlC){alert('Connect to the puck first!');return;}
+  if(!confirm('Place disc FLAT on a level surface.\n\nTap OK when ready.'))return;
   calibrating=true; hdr=null; rxMag=[]; rxImu=[];
-  setBigState('armed','CALIBRATING \u2014 disc must be flat on a level surface!');
-  await ctrlC.writeValue(new Uint8Array([0x01])); // ARM
-  log('Calibrating... recording 2s of rest data');
-  setTimeout(async()=>{
-    if(calibrating&&ctrlC){try{await ctrlC.writeValue(new Uint8Array([0x03]));}catch(e){}}
-  },2000);
+  setBigState('armed','CALIBRATING \u2014 recording 2 seconds...');
+  log('Calibrating...');
+  try{
+    await ctrlC.writeValue(new Uint8Array([0x01])); // ARM
+    await new Promise(r=>setTimeout(r,2500)); // record 2.5s
+    await ctrlC.writeValue(new Uint8Array([0x03])); // stop+dump
+  }catch(e){
+    calibrating=false;
+    alert('Calibration failed: '+e.message);
+    setAction('ready');
+  }
 }
 
 function finishCalibration(){
   calibrating=false;
-  if(rxImu.length<10){log('Calibration failed: too few samples');setAction('ready');return;}
+  if(rxImu.length<10){
+    alert('Calibration failed: only '+rxImu.length+' IMU samples received.');
+    setAction('ready');return;
+  }
   let sx=0,sy=0,sz=0;
   for(const s of rxImu){sx+=s.ax;sy+=s.ay;sz+=s.az;}
   const n=rxImu.length;
   cal={gx:sx/n,gy:sy/n,gz:sz/n,date:new Date().toISOString()};
   localStorage.setItem('discpuck_cal',JSON.stringify(cal));
-  const mag=Math.sqrt(cal.gx*cal.gx+cal.gy*cal.gy+cal.gz*cal.gz);
-  log(`Calibrated! g=[${cal.gx.toFixed(3)}, ${cal.gy.toFixed(3)}, ${cal.gz.toFixed(3)}] |g|=${mag.toFixed(2)}`);
+  const gmag=Math.sqrt(cal.gx*cal.gx+cal.gy*cal.gy+cal.gz*cal.gz);
+  const tilt=Math.acos(Math.min(1,Math.abs(cal.gz)/gmag))*180/Math.PI;
   hdr=null;rxMag=[];rxImu=[];
   renderCalStatus();
   setAction('ready');
-  setBigState('idle','Calibration saved! Ready to throw.');
+  setBigState('idle','Calibration saved!');
+  alert('Calibration saved!\n\nSensor tilt from disc: '+tilt.toFixed(1)+'\u00B0\n|g| = '+gmag.toFixed(2)+' m/s\u00B2\nIMU samples: '+n);
 }
 
 function renderCalStatus(){
@@ -468,76 +478,100 @@ function fft(s){const N=s.length,m=new Float64Array(N/2);for(let k=0;k<N/2;k++){
 
 // ── Throw analysis ─────────────────────────────────────────
 function analyzeThrow(t){
-  const imu=t.imuSamples;if(imu.length<30)return;
+  const imu=t.imuSamples, mag=t.magSamples;
+  if(imu.length<30||mag.length<100)return;
   const imuDt=1000/t.header.imuHz, magDt=1000/t.header.magHz;
+  const magPerImu=Math.round(t.header.magHz/t.header.imuHz);
 
-  // |accel| in g for each IMU sample
+  // |accel| in g
   const gArr=imu.map(s=>Math.sqrt(s.ax*s.ax+s.ay*s.ay+s.az*s.az)/9.81);
 
-  // Find peak G index (= release moment)
-  let peakIdx=0;
-  for(let i=1;i<gArr.length;i++)if(gArr[i]>gArr[peakIdx])peakIdx=i;
-  if(gArr[peakIdx]<2)return; // no real throw detected
-
-  // Release: after peak, first drop below 2g (entering free flight)
-  let relIdx=peakIdx;
-  for(let i=peakIdx;i<gArr.length;i++){if(gArr[i]<2){relIdx=i;break;}}
-
-  // Landing: after release + min 0.3s, next spike above 2.5g
-  let landIdx=-1;
-  const minFlight=Math.floor(0.3*t.header.imuHz); // 30 samples at 100Hz
-  for(let i=relIdx+minFlight;i<gArr.length-1;i++){
-    if(gArr[i]>2.5&&gArr[i]>gArr[i-1]*1.3){landIdx=i;break;}
+  // ── Step 1: Find flight via mag oscillation ─────────
+  // Compute mag variance in windows aligned to IMU timeline
+  const halfWin=Math.floor(magPerImu*2.5); // ~25 mag samples = 50ms
+  const magVar=[];
+  for(let i=0;i<imu.length;i++){
+    const mc=i*magPerImu;
+    const s=Math.max(0,mc-halfWin), e=Math.min(mag.length,mc+halfWin);
+    if(e-s<5){magVar.push(0);continue;}
+    let sum=0,sum2=0,n=0;
+    for(let j=s;j<e;j++){sum+=mag[j].x;sum2+=mag[j].x*mag[j].x;n++;}
+    magVar.push(sum2/n-(sum/n)*(sum/n));
   }
+
+  // Threshold: 75th percentile of variance, minimum 1
+  const sv=[...magVar].sort((a,b)=>a-b);
+  const thresh=Math.max(sv[Math.floor(sv.length*0.75)]||1, 1);
+
+  // Find longest region above threshold = flight
+  let fStart=-1,fEnd=-1,fLen=0,cs=-1;
+  for(let i=0;i<magVar.length;i++){
+    if(magVar[i]>thresh){if(cs===-1)cs=i;}
+    else{if(cs!==-1){if(i-cs>fLen){fStart=cs;fEnd=i;fLen=i-cs;}cs=-1;}}
+  }
+  if(cs!==-1&&magVar.length-cs>fLen){fStart=cs;fEnd=magVar.length;fLen=fEnd-fStart;}
+
+  if(fLen<5)return; // no clear flight
+
+  // ── Step 2: Find accel peaks bracketing the flight ──
+  // Release: highest peak within 1s before flight start
+  const searchPre=Math.max(0,fStart-Math.floor(t.header.imuHz));
+  let relIdx=fStart,relG=0;
+  for(let i=searchPre;i<=fStart;i++){if(gArr[i]>relG){relG=gArr[i];relIdx=i;}}
+  if(relG<1.5)relIdx=fStart;
+
+  // Landing: highest peak within 1s after flight end
+  const searchPost=Math.min(imu.length,fEnd+Math.floor(t.header.imuHz));
+  let landIdx=-1,landG=0;
+  for(let i=fEnd;i<searchPost;i++){if(gArr[i]>landG){landG=gArr[i];landIdx=i;}}
+  if(landG<1.5)landIdx=-1;
+
+  // Peak G is the higher of the two
+  const peakIdx=relG>=landG?relIdx:(landIdx>=0?landIdx:relIdx);
 
   t.releaseMs=+(relIdx*imuDt).toFixed(0);
   t.landingMs=landIdx>=0?+(landIdx*imuDt).toFixed(0):null;
   t.flightTime=t.landingMs!=null?+((t.landingMs-t.releaseMs)/1000).toFixed(2):null;
 
-  // Speed from GPS distance + flight time
+  // ── Step 3: Speed from GPS ──────────────────────────
   if(t.distance&&t.flightTime&&t.flightTime>0.1){
-    t.estSpeed=+(t.distance/t.flightTime).toFixed(1); // avg speed in m/s
+    t.estSpeed=+(t.distance/t.flightTime).toFixed(1);
   }
 
-  // Spin quality from mag FFT during flight
-  const magStart=Math.floor(t.releaseMs/magDt);
-  const magEnd=t.landingMs?Math.floor(t.landingMs/magDt):t.magSamples.length;
-  const flightMag=t.magSamples.slice(magStart,Math.min(magEnd,magStart+2048));
-  if(flightMag.length>=64){
-    const fN=2**Math.floor(Math.log2(flightMag.length));
-    const sig=flightMag.slice(0,fN).map(s=>s.x);
+  // ── Step 4: Spin quality from flight-only mag FFT ───
+  const mStart=Math.floor(t.releaseMs/magDt);
+  const mEnd=t.landingMs?Math.floor(t.landingMs/magDt):mag.length;
+  const fMag=mag.slice(mStart,Math.min(mEnd,mStart+2048));
+  if(fMag.length>=64){
+    const fN=2**Math.floor(Math.log2(fMag.length));
+    const sig=fMag.slice(0,fN).map(s=>s.x);
     const mean=sig.reduce((a,b)=>a+b,0)/sig.length;
     const w=sig.map((v,i)=>(v-mean)*0.5*(1-Math.cos(2*Math.PI*i/(sig.length-1))));
-    const mags=fft(w);
-    // Find spin peak (skip DC bin)
+    const ms=fft(w);
     let spinBin=1,spinVal=0;
-    for(let k=2;k<mags.length-1;k++)if(mags[k]>spinVal){spinVal=mags[k];spinBin=k;}
-    // Energy in spin peak (±2 bins) vs total
+    for(let k=2;k<ms.length-1;k++)if(ms[k]>spinVal){spinVal=ms[k];spinBin=k;}
     let peakE=0,totalE=0;
-    for(let k=1;k<mags.length;k++)totalE+=mags[k]*mags[k];
-    for(let k=Math.max(1,spinBin-2);k<=Math.min(mags.length-1,spinBin+2);k++)peakE+=mags[k]*mags[k];
+    for(let k=1;k<ms.length;k++)totalE+=ms[k]*ms[k];
+    for(let k=Math.max(1,spinBin-2);k<=Math.min(ms.length-1,spinBin+2);k++)peakE+=ms[k]*ms[k];
     t.spinQuality=totalE>0?Math.round(peakE/totalE*100):0;
   }
 
-  // ── Hyzer & nose angle (requires calibration) ───────
+  // ── Step 5: Hyzer & nose (requires calibration) ─────
   if(!cal)return;
   const cmag=Math.sqrt(cal.gx*cal.gx+cal.gy*cal.gy+cal.gz*cal.gz);
   if(cmag<0.1)return;
-  // Disc normal from calibration (gravity direction when disc is flat)
   const N={x:cal.gx/cmag,y:cal.gy/cmag,z:cal.gz/cmag};
 
   // Forward = throw direction from peak accel, projected into disc plane
   const pk=imu[peakIdx];
   const pDotN=pk.ax*N.x+pk.ay*N.y+pk.az*N.z;
-  let fx=pk.ax-pDotN*N.x, fy=pk.ay-pDotN*N.y, fz=pk.az-pDotN*N.z;
+  let fx=pk.ax-pDotN*N.x,fy=pk.ay-pDotN*N.y,fz=pk.az-pDotN*N.z;
   const fm=Math.sqrt(fx*fx+fy*fy+fz*fz);
   if(fm<0.1)return;
   fx/=fm;fy/=fm;fz/=fm;
+  const lx=N.y*fz-N.z*fy,ly=N.z*fx-N.x*fz,lz=N.x*fy-N.y*fx;
 
-  // Lateral = disc_normal x forward
-  const lx=N.y*fz-N.z*fy, ly=N.z*fx-N.x*fz, lz=N.x*fy-N.y*fx;
-
-  // "Up" from accel just after release (avg 50ms window)
+  // "Up" from accel just after release (avg 50ms)
   const ri=Math.floor(t.releaseMs/imuDt);
   const win=imu.slice(ri,ri+5);
   if(win.length<3)return;
@@ -548,14 +582,10 @@ function analyzeThrow(t){
   if(um<0.1)return;
   ux/=um;uy/=um;uz/=um;
 
-  // Decompose "up" into disc frame {N, F, L}
   const uN=ux*N.x+uy*N.y+uz*N.z;
   const uF=ux*fx+uy*fy+uz*fz;
   const uL=ux*lx+uy*ly+uz*lz;
-
-  // Nose: positive = nose up (leading edge above trailing)
   t.noseAngle=+(-Math.atan2(uF,uN)*180/Math.PI).toFixed(1);
-  // Hyzer: positive = hyzer (outer edge down for RHBH)
   t.hyzerAngle=+(Math.atan2(uL,uN)*180/Math.PI).toFixed(1);
 }
 
