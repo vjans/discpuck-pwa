@@ -6,7 +6,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="manifest.json">
-<title>DiscPuck</title>
+<title>VicDisc</title>
 <style>
 :root{--bg:#0a0e14;--sf:#12181f;--cd:#1a2230;--bd:#2a3444;--tx:#e2e8f0;--mt:#64748b;
   --gn:#22c55e;--bl:#3b82f6;--or:#f59e0b;--rd:#ef4444;--pr:#a855f7;--cy:#06b6d4;
@@ -116,7 +116,7 @@ canvas{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);wi
 <!-- Onboarding -->
 <div class="overlay" id="onboard" style="display:none">
   <div class="obox">
-    <h2>Welcome to DiscPuck</h2>
+    <h2>Welcome to VicDisc</h2>
     <p>Enter your name to start collecting throw data. This identifies your throws in the shared database.</p>
     <input type="text" id="obName" placeholder="Your name" autocomplete="name">
     <br>
@@ -126,7 +126,7 @@ canvas{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);wi
 
 <!-- Header -->
 <div class="hdr">
-  <h1>DiscPuck</h1>
+  <h1>VicDisc</h1>
   <div class="hdr-right"><span class="dot off" id="bleDot"></span><span id="bleLabel">Disconnected</span></div>
 </div>
 
@@ -139,7 +139,7 @@ canvas{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);wi
 <!-- Action -->
 <div class="act">
   <button class="btn-connect" id="actBtn" onclick="doAction()">CONNECT</button>
-  <div class="hint" id="actHint">Pair with your DiscPuck sensor</div>
+  <div class="hint" id="actHint">Pair with your VicDisc sensor</div>
   <div class="tee-info" id="teeInfo"></div>
 </div>
 
@@ -334,7 +334,7 @@ function onStat(e){
 function setPhase(p){
   phase=p;const btn=document.getElementById('actBtn'),hint=document.getElementById('actHint');
   btn.className='';
-  if(p==='setup'){btn.className='btn-connect';btn.textContent='CONNECT';hint.textContent='Pair with your DiscPuck sensor';}
+  if(p==='setup'){btn.className='btn-connect';btn.textContent='CONNECT';hint.textContent='Pair with your VicDisc sensor';}
   else if(p==='ready'){btn.className='btn-throw';btn.textContent='THROW';hint.textContent='Arms sensor + disconnects. Then throw!';}
   else if(p==='fly'){btn.className='btn-landed';btn.textContent='LANDED';hint.textContent='Tap when at disc landing spot';}
   else if(p==='recv'){btn.className='btn-recv';btn.textContent='RECEIVING...';hint.textContent='';}
@@ -493,10 +493,11 @@ function analyzeThrow(t){
   }
 
   // Release = earlier peak, Landing = later peak
-  if(p2<0)p2=p1; // only one peak found
-  let relIdx=Math.min(p1,p2), landIdx=Math.max(p1,p2);
-  // If peaks are the same (no second peak), no landing
-  if(relIdx===landIdx)landIdx=-1;
+  // Second peak must be above 2g to count as real impact
+  if(p2<0||p2g<2)p2=-1;
+  let relIdx,landIdx;
+  if(p2>=0){relIdx=Math.min(p1,p2);landIdx=Math.max(p1,p2);}
+  else{relIdx=p1;landIdx=-1;}
 
   t.releaseMs=+(relIdx*iDt).toFixed(0);
   t.landingMs=landIdx>=0?+(landIdx*iDt).toFixed(0):null;
@@ -519,7 +520,8 @@ function analyzeThrow(t){
     t.spinQuality=tE>0?Math.round(pE/tE*100):0;
   }
 
-  // ── Angles (requires calibration) ──
+  // ── Hyzer & nose angle (from PRE-THROW orientation, not in-flight) ──
+  // 1-2s before release: disc is in hand at intended angle, accel ≈ gravity
   if(!cal)return;
   const cm=Math.sqrt(cal.gx**2+cal.gy**2+cal.gz**2);if(cm<.1)return;
   const N_={x:cal.gx/cm,y:cal.gy/cm,z:cal.gz/cm};
@@ -530,12 +532,13 @@ function analyzeThrow(t){
   const fm2=Math.sqrt(fx*fx+fy*fy+fz*fz);if(fm2<.1)return;
   fx/=fm2;fy/=fm2;fz/=fm2;
   const lx=N_.y*fz-N_.z*fy,ly=N_.z*fx-N_.x*fz,lz=N_.x*fy-N_.y*fx;
-  // "Up" from accel 0.3s into flight (past release transient)
-  const ri=relIdx+Math.floor(0.3*t.header.imuHz);
-  if(ri+10>=imu.length)return;
-  const win=imu.slice(ri,ri+10);if(win.length<5)return;
-  let ux=0,uy=0,uz=0;for(const s of win){ux+=s.ax;uy+=s.ay;uz+=s.az;}
-  ux/=win.length;uy/=win.length;uz/=win.length;
+  // Gravity from 1-2s BEFORE release (disc in hand at intended angle)
+  const preStart=Math.max(0,relIdx-Math.floor(2*t.header.imuHz));
+  const preEnd=Math.max(0,relIdx-Math.floor(0.5*t.header.imuHz));
+  if(preEnd<=preStart)return;
+  const preWin=imu.slice(preStart,preEnd);if(preWin.length<10)return;
+  let ux=0,uy=0,uz=0;for(const s of preWin){ux+=s.ax;uy+=s.ay;uz+=s.az;}
+  ux/=preWin.length;uy/=preWin.length;uz/=preWin.length;
   const um=Math.sqrt(ux*ux+uy*uy+uz*uz);if(um<.1)return;
   ux/=um;uy/=um;uz/=um;
   const uN=ux*N_.x+uy*N_.y+uz*N_.z;

@@ -1,6 +1,6 @@
 {
-  "name": "DiscPuck Collector",
-  "short_name": "DiscPuck",
+  "name": "VicDisc Collector",
+  "short_name": "VicDisc",
   "start_url": "index.html",
   "display": "standalone",
   "orientation": "portrait",
