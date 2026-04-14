@@ -476,56 +476,71 @@ function lbl(key,val){
 // ═══════════════════════════════════════════════════════════
 function analyzeThrow(t){
   const imu=t.imuSamples,mag=t.magSamples;
-  if(imu.length<30||mag.length<100)return;
-  const iDt=1000/t.header.imuHz,mDt=1000/t.header.magHz,mpi=Math.round(t.header.magHz/t.header.imuHz);
+  if(imu.length<20||mag.length<50)return;
+  const iDt=1000/t.header.imuHz,mDt=1000/t.header.magHz;
   const gA=imu.map(s=>Math.sqrt(s.ax*s.ax+s.ay*s.ay+s.az*s.az)/9.81);
-  // Mag variance per IMU sample
-  const hw=Math.floor(mpi*2.5),mv=[];
-  for(let i=0;i<imu.length;i++){const c=i*mpi,s=Math.max(0,c-hw),e=Math.min(mag.length,c+hw);
-    if(e-s<5){mv.push(0);continue;}let sm=0,s2=0,n=0;
-    for(let j=s;j<e;j++){sm+=mag[j].x;s2+=mag[j].x*mag[j].x;n++;}mv.push(s2/n-(sm/n)**2);}
-  // Flight region
-  const sv=[...mv].sort((a,b)=>a-b),th=Math.max(sv[Math.floor(sv.length*.75)]||1,1);
-  let fS=-1,fE=-1,fL=0,cs=-1;
-  for(let i=0;i<mv.length;i++){if(mv[i]>th){if(cs===-1)cs=i;}else{if(cs!==-1){if(i-cs>fL){fS=cs;fE=i;fL=i-cs;}cs=-1;}}}
-  if(cs!==-1&&mv.length-cs>fL){fS=cs;fE=mv.length;fL=fE-fS;}
-  if(fL<5)return;
-  // Peaks
-  const pre=Math.max(0,fS-Math.floor(t.header.imuHz));
-  let rI=fS,rG=0;for(let i=pre;i<=fS;i++)if(gA[i]>rG){rG=gA[i];rI=i;}
-  const post=Math.min(imu.length,fE+Math.floor(t.header.imuHz));
-  let lI=-1,lG=0;for(let i=fE;i<post;i++)if(gA[i]>lG){lG=gA[i];lI=i;}
-  if(lG<1.5)lI=-1;
-  const pI=rG>=lG?rI:(lI>=0?lI:rI);
-  t.releaseMs=+(rI*iDt).toFixed(0);t.landingMs=lI>=0?+(lI*iDt).toFixed(0):null;
+
+  // ── Find two biggest accel peaks (throw + landing) ──
+  // Peak 1: global max
+  let p1=0;
+  for(let i=1;i<gA.length;i++)if(gA[i]>gA[p1])p1=i;
+
+  // Peak 2: highest point at least 0.3s away from peak 1
+  const minSep=Math.floor(0.3*t.header.imuHz);
+  let p2=-1,p2g=0;
+  for(let i=0;i<gA.length;i++){
+    if(Math.abs(i-p1)>=minSep&&gA[i]>p2g){p2g=gA[i];p2=i;}
+  }
+
+  // Release = earlier peak, Landing = later peak
+  if(p2<0)p2=p1; // only one peak found
+  let relIdx=Math.min(p1,p2), landIdx=Math.max(p1,p2);
+  // If peaks are the same (no second peak), no landing
+  if(relIdx===landIdx)landIdx=-1;
+
+  t.releaseMs=+(relIdx*iDt).toFixed(0);
+  t.landingMs=landIdx>=0?+(landIdx*iDt).toFixed(0):null;
   t.flightTime=t.landingMs!=null?+((t.landingMs-t.releaseMs)/1000).toFixed(2):null;
   if(t.distance&&t.flightTime&&t.flightTime>.1)t.estSpeed=+(t.distance/t.flightTime).toFixed(1);
-  // Spin quality
-  const ms=Math.floor(t.releaseMs/mDt),me=t.landingMs?Math.floor(t.landingMs/mDt):mag.length;
+
+  // ── Spin quality (FFT on flight segment) ──
+  const ms=Math.floor(t.releaseMs/mDt);
+  const me=t.landingMs!=null?Math.floor(t.landingMs/mDt):mag.length;
   const fm=mag.slice(ms,Math.min(me,ms+2048));
-  if(fm.length>=64){const fN=2**Math.floor(Math.log2(fm.length)),sig=fm.slice(0,fN).map(s=>s.x);
+  if(fm.length>=64){
+    const fN=2**Math.floor(Math.log2(fm.length));
+    const sig=fm.slice(0,fN).map(s=>s.x);
     const mn=sig.reduce((a,b)=>a+b,0)/sig.length;
     const w=sig.map((v,i)=>(v-mn)*.5*(1-Math.cos(2*Math.PI*i/(sig.length-1))));
-    const mg=fft(w);let sB=1,sV=0;for(let k=2;k<mg.length-1;k++)if(mg[k]>sV){sV=mg[k];sB=k;}
+    const mg=fft(w);let sB=1,sV=0;
+    for(let k=2;k<mg.length-1;k++)if(mg[k]>sV){sV=mg[k];sB=k;}
     let pE=0,tE=0;for(let k=1;k<mg.length;k++)tE+=mg[k]**2;
     for(let k=Math.max(1,sB-2);k<=Math.min(mg.length-1,sB+2);k++)pE+=mg[k]**2;
-    t.spinQuality=tE>0?Math.round(pE/tE*100):0;}
-  // Angles
-  if(!cal)return;const cm=Math.sqrt(cal.gx**2+cal.gy**2+cal.gz**2);if(cm<.1)return;
+    t.spinQuality=tE>0?Math.round(pE/tE*100):0;
+  }
+
+  // ── Angles (requires calibration) ──
+  if(!cal)return;
+  const cm=Math.sqrt(cal.gx**2+cal.gy**2+cal.gz**2);if(cm<.1)return;
   const N_={x:cal.gx/cm,y:cal.gy/cm,z:cal.gz/cm};
-  const pk=imu[pI],pdn=pk.ax*N_.x+pk.ay*N_.y+pk.az*N_.z;
+  // Forward = throw direction from release peak accel, projected into disc plane
+  const pk=imu[relIdx];
+  const pdn=pk.ax*N_.x+pk.ay*N_.y+pk.az*N_.z;
   let fx=pk.ax-pdn*N_.x,fy=pk.ay-pdn*N_.y,fz=pk.az-pdn*N_.z;
-  const fm2=Math.sqrt(fx*fx+fy*fy+fz*fz);if(fm2<.1)return;fx/=fm2;fy/=fm2;fz/=fm2;
+  const fm2=Math.sqrt(fx*fx+fy*fy+fz*fz);if(fm2<.1)return;
+  fx/=fm2;fy/=fm2;fz/=fm2;
   const lx=N_.y*fz-N_.z*fy,ly=N_.z*fx-N_.x*fz,lz=N_.x*fy-N_.y*fx;
-  // Sample 0.3-0.5s into flight (past release transient, stable aero forces)
-  const flightOffset=Math.floor(0.3*t.header.imuHz); // 30 samples at 100Hz
-  const ri=Math.floor(t.releaseMs/iDt)+flightOffset;
+  // "Up" from accel 0.3s into flight (past release transient)
+  const ri=relIdx+Math.floor(0.3*t.header.imuHz);
   if(ri+10>=imu.length)return;
   const win=imu.slice(ri,ri+10);if(win.length<5)return;
   let ux=0,uy=0,uz=0;for(const s of win){ux+=s.ax;uy+=s.ay;uz+=s.az;}
   ux/=win.length;uy/=win.length;uz/=win.length;
-  const um=Math.sqrt(ux*ux+uy*uy+uz*uz);if(um<.1)return;ux/=um;uy/=um;uz/=um;
-  const uN=ux*N_.x+uy*N_.y+uz*N_.z,uF=ux*fx+uy*fy+uz*fz,uL=ux*lx+uy*ly+uz*lz;
+  const um=Math.sqrt(ux*ux+uy*uy+uz*uz);if(um<.1)return;
+  ux/=um;uy/=um;uz/=um;
+  const uN=ux*N_.x+uy*N_.y+uz*N_.z;
+  const uF=ux*fx+uy*fy+uz*fz;
+  const uL=ux*lx+uy*ly+uz*lz;
   t.noseAngle=+(-Math.atan2(uF,uN)*180/Math.PI).toFixed(1);
   t.hyzerAngle=+(Math.atan2(uL,uN)*180/Math.PI).toFixed(1);
 }
