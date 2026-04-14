@@ -250,21 +250,21 @@ async function bleRequestDump(){
 }
 
 // ── Calibration ────────────────────────────────────────────
-async function startCalibration(){
+function startCalibration(){
   if(!ctrlC){alert('Connect to the puck first!');return;}
-  if(!confirm('Place disc FLAT on a level surface.\n\nTap OK when ready.'))return;
+  alert('Place disc FLAT on a level surface.\n\nCalibration starts when you dismiss this.');
   calibrating=true; hdr=null; rxMag=[]; rxImu=[];
   setBigState('armed','CALIBRATING \u2014 recording 2 seconds...');
-  log('Calibrating...');
-  try{
-    await ctrlC.writeValue(new Uint8Array([0x01])); // ARM
-    await new Promise(r=>setTimeout(r,2500)); // record 2.5s
-    await ctrlC.writeValue(new Uint8Array([0x03])); // stop+dump
-  }catch(e){
-    calibrating=false;
-    alert('Calibration failed: '+e.message);
-    setAction('ready');
-  }
+  log('Calibrating... sending ARM');
+  ctrlC.writeValue(new Uint8Array([0x01])).then(()=>{
+    log('ARM sent, waiting 2.5s...');
+    setTimeout(()=>{
+      log('Sending stop+dump...');
+      ctrlC.writeValue(new Uint8Array([0x03])).then(()=>{
+        log('Dump requested, waiting for data...');
+      }).catch(e=>{calibrating=false;alert('Failed to stop: '+e.message);});
+    },2500);
+  }).catch(e=>{calibrating=false;alert('Failed to ARM: '+e.message);});
 }
 
 function finishCalibration(){
