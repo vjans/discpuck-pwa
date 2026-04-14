@@ -204,7 +204,7 @@ canvas{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);wi
 // ═══════════════════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════════════════
-const BUILD='2b23590 | FFT min=8, full DFT, logging';
+const BUILD='cd0a002 | shared time axis for mag/imu alignment';
 const SUPA_URL='https://fjptyllozsmlhxpahocd.supabase.co';
 const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqcHR5bGxvenNtbGh4cGFob2NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzA1NjMsImV4cCI6MjA5MTc0NjU2M30.Zx3kn4TBpGFjDfSeNgUHq86FAaNtNNFV-1F1g9b0Ynk';
 const BLE_SVC='19b10000-e8f2-537e-4f6c-d104768a1214';
@@ -426,6 +426,12 @@ function finishThrow(){
     throwType:'',effort:'',notes:'',synced:false};
 
   analyzeThrow(t);
+
+  // Shared time axis: mag and IMU cover different durations due to BLE interleaving ratio
+  // Use the max so markers (from IMU) align correctly on mag plots and vice versa
+  t.maxTime=Math.max(
+    t.magSamples.length>0?t.magSamples[t.magSamples.length-1].t:0,
+    t.imuSamples.length>0?t.imuSamples[t.imuSamples.length-1].t:0)||1;
 
   // FFT on flight segment — clamp to actual data, use all available samples
   const mDt2=1000/t.header.magHz;
@@ -663,7 +669,7 @@ function drawPlot(t){
   const rng=Math.max(mx-mn,.1);mn-=rng*.1;mx+=rng*.1;
   cx.strokeStyle='#1e293b';cx.lineWidth=1;
   for(let i=0;i<=4;i++){const y=i/4*H;cx.beginPath();cx.moveTo(0,y);cx.lineTo(W,y);cx.stroke();}
-  const cols=['#ef4444','#22c55e','#3b82f6'],step=Math.max(1,Math.floor(N/(W/dp))),tE=d[N-1].t||1;
+  const cols=['#ef4444','#22c55e','#3b82f6'],step=Math.max(1,Math.floor(N/(W/dp))),tE=t.maxTime||d[N-1].t||1;
   for(let a=0;a<3;a++){cx.strokeStyle=cols[a];cx.lineWidth=1.2*dp;cx.beginPath();
     for(let i=0;i<N;i+=step){const v=g(d[i])[a],x=((d[i].t||0)/tE)*W,y=H-((v-mn)/(mx-mn))*H;
       i===0?cx.moveTo(x,y):cx.lineTo(x,y);}cx.stroke();}
