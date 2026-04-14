@@ -213,7 +213,7 @@ function renderWeather(){
 async function bleConnect(){
   try{
     if(!device){
-      device=await navigator.bluetooth.requestDevice({filters:[{name:'DiscPuck'}],optionalServices:[SVC]});
+      device=await navigator.bluetooth.requestDevice({filters:[{services:[SVC]}]});
     }
     const srv=await(await device.gatt.connect()).getPrimaryService(SVC);
     dataC=await srv.getCharacteristic(DATA);
