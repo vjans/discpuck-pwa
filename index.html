@@ -204,7 +204,7 @@ canvas{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);wi
 // ═══════════════════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════════════════
-const BUILD='f5a9746 | adaptive gyro 40%';
+const BUILD='9510727b | clamp FFT to actual data';
 const SUPA_URL='https://fjptyllozsmlhxpahocd.supabase.co';
 const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqcHR5bGxvenNtbGh4cGFob2NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzA1NjMsImV4cCI6MjA5MTc0NjU2M30.Zx3kn4TBpGFjDfSeNgUHq86FAaNtNNFV-1F1g9b0Ynk';
 const BLE_SVC='19b10000-e8f2-537e-4f6c-d104768a1214';
@@ -427,11 +427,11 @@ function finishThrow(){
 
   analyzeThrow(t);
 
-  // FFT on flight segment only (where mag oscillation = disc spinning)
+  // FFT on flight segment only — clamp to actual data bounds (BLE stall may truncate)
   const mDt2=1000/t.header.magHz;
-  const fftStart=t.releaseMs!=null?Math.floor(t.releaseMs/mDt2):0;
-  const fftEnd=t.landingMs!=null?Math.floor(t.landingMs/mDt2):t.magSamples.length;
-  const flightMag=t.magSamples.slice(fftStart,fftEnd);
+  const fftStart=Math.min(t.releaseMs!=null?Math.floor(t.releaseMs/mDt2):0, t.magSamples.length-1);
+  const fftEnd=Math.min(t.landingMs!=null?Math.floor(t.landingMs/mDt2):t.magSamples.length, t.magSamples.length);
+  const flightMag=t.magSamples.slice(Math.max(0,fftStart),fftEnd);
   if(flightMag.length>=64){
     const fN=Math.min(1024,2**Math.floor(Math.log2(flightMag.length)));
     const sr=t.header.magHz,sig=flightMag.slice(0,fN).map(s=>s.x);
@@ -504,9 +504,9 @@ function analyzeThrow(t){
   if(t.distance&&t.flightTime&&t.flightTime>.1)t.estSpeed=+(t.distance/t.flightTime).toFixed(1);
 
   // ── Spin quality (FFT on flight segment) ──
-  const ms=Math.floor(t.releaseMs/mDt);
-  const me=t.landingMs!=null?Math.floor(t.landingMs/mDt):mag.length;
-  const fm=mag.slice(ms,Math.min(me,ms+2048));
+  const ms=Math.min(Math.floor(t.releaseMs/mDt),mag.length-1);
+  const me=Math.min(t.landingMs!=null?Math.floor(t.landingMs/mDt):mag.length,mag.length);
+  const fm=mag.slice(Math.max(0,ms),Math.min(me,ms+2048));
   if(fm.length>=64){
     const fN=2**Math.floor(Math.log2(fm.length));
     const sig=fm.slice(0,fN).map(s=>s.x);
