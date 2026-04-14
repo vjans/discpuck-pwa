@@ -443,7 +443,7 @@ function renderThrows(){
 function setLbl(i,k,v){throws[i][k]=v;renderThrows();}
 
 // ── Export ─────────────────────────────────────────────────
-function exportSession(){
+async function exportSession(){
   const s={exported:new Date().toISOString(),
     session:{disc:document.getElementById('sDisc').value,notes:document.getElementById('sNotes').value},
     throws:throws.map(t=>({
@@ -459,9 +459,20 @@ function exportSession(){
           gx:+s.gx.toFixed(3),gy:+s.gy.toFixed(3),gz:+s.gz.toFixed(3)}))},
       labels:{throw_type:t.throwType,effort:t.effort,notes:t.notes}
     }))};
+  const json=JSON.stringify(s,null,2);
+  const fname=`discpuck_${new Date().toISOString().slice(0,10)}_${throws.length}t.json`;
+  // Use native share sheet on iOS (more reliable than blob downloads)
+  try{
+    const file=new File([json],fname,{type:'application/json'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      await navigator.share({files:[file],title:'DiscPuck Session'});
+      log('Shared '+throws.length+' throws');return;
+    }
+  }catch(e){if(e.name!=='AbortError')log('Share failed: '+e.message);}
+  // Fallback: blob download
   const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([JSON.stringify(s,null,2)],{type:'application/json'}));
-  a.download=`discpuck_${new Date().toISOString().slice(0,10)}_${throws.length}t.json`;a.click();
+  a.href=URL.createObjectURL(new Blob([json],{type:'application/json'}));
+  a.download=fname;a.click();
   log('Exported '+throws.length+' throws');
 }
 
