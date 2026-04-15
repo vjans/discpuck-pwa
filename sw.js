@@ -1,4 +1,4 @@
-const CACHE = 'discpuck-v1';
+const CACHE = 'discpuck-v2';
 const ASSETS = ['index.html', 'manifest.json'];
 
 self.addEventListener('install', e => {
