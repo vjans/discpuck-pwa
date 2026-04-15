@@ -153,6 +153,12 @@ canvas{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);wi
   <div class="mc"><div class="v" id="mNose" style="color:var(--bl)">--</div><div class="u">Nose</div></div>
 </div>
 
+<!-- Detailed metrics comparison (collapsible) -->
+<details class="panel" id="detailPanel" style="display:none">
+  <summary>Detailed Metrics (Multi-Method Comparison)</summary>
+  <div id="detailBody" style="font-family:ui-monospace,monospace;font-size:.7rem;line-height:1.7;margin-top:.3rem;overflow-x:auto"></div>
+</details>
+
 <!-- Quick labels -->
 <div class="labels" id="labelBar" style="display:none">
   <div class="group"><span class="gl">Type</span>
@@ -204,7 +210,7 @@ canvas{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);wi
 // ═══════════════════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════════════════
-const BUILD='apr15a | zero-crossing RPM + wall-clock timing + 3-axis FFT';
+const BUILD='apr15b | multi-method metrics: speed(3), wobble, launch angle, spin decay, advance ratio';
 const SUPA_URL='https://fjptyllozsmlhxpahocd.supabase.co';
 const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqcHR5bGxvenNtbGh4cGFob2NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzA1NjMsImV4cCI6MjA5MTc0NjU2M30.Zx3kn4TBpGFjDfSeNgUHq86FAaNtNNFV-1F1g9b0Ynk';
 const BLE_SVC='19b10000-e8f2-537e-4f6c-d104768a1214';
@@ -482,7 +488,7 @@ function finishThrow(){
 
   throws.push(t);lastThrow=t;
   rxMag=[];rxImu=[];window._land=null;
-  updateMetrics(t);setPhase('done');renderHist();drawPlot(t);
+  updateMetrics(t);renderDetailedMetrics(t);setPhase('done');renderHist();drawPlot(t);
   syncThrow(t);
   log('#'+t.id+': '+(dist?dist+'m ':'')+
     'ZC='+(t.crossRPM||'--')+' FFT='+(t.peakRPM||'--')+'RPM '+t.peakG+'g'+(t.flightTime?' '+t.flightTime+'s':''));
@@ -586,11 +592,235 @@ function analyzeThrow(t){
   const uL=ux*lx+uy*ly+uz*lz;
   t.noseAngle=+(-Math.atan2(uF,uN)*180/Math.PI).toFixed(1);
   t.hyzerAngle=+(Math.atan2(uL,uN)*180/Math.PI).toFixed(1);
+
+  // ═══════════════════════════════════════════════════════════
+  // EXTENDED METRICS — redundant methods for cross-validation
+  // ═══════════════════════════════════════════════════════════
+  const iDt2=imu.length>1?(imu[imu.length-1].t-imu[0].t)/(imu.length-1)/1000:0.01; // seconds
+  const mDt2=mag.length>1?(mag[mag.length-1].t-mag[0].t)/(mag.length-1)/1000:0.002;
+  const ext={};
+
+  // ── SPEED: accel integration (gravity-subtracted) ────────
+  // Use calibration gravity or pre-throw average as gravity reference
+  const gRef=cal?{x:cal.gx,y:cal.gy,z:cal.gz}:{x:ux*um,y:uy*um,z:uz*um};
+  let svx=0,svy=0,svz=0;
+  const throwStart=Math.max(0,relIdx-Math.floor(500/iDt)); // 500ms before release
+  for(let i=throwStart;i<=relIdx&&i<imu.length;i++){
+    svx+=(imu[i].ax-gRef.x)*iDt2;
+    svy+=(imu[i].ay-gRef.y)*iDt2;
+    svz+=(imu[i].az-gRef.z)*iDt2;
+  }
+  const speedAccelInt=Math.sqrt(svx*svx+svy*svy+svz*svz);
+
+  // ── SPEED: magnitude integration (|a|-g, direction-agnostic) ──
+  let speedMagInt=0;
+  for(let i=throwStart;i<=relIdx&&i<imu.length;i++){
+    const am=Math.sqrt(imu[i].ax**2+imu[i].ay**2+imu[i].az**2);
+    speedMagInt+=Math.max(0,am-9.81)*iDt2;
+  }
+
+  // ── SPEED: Giljarhus ratio (spin/5.2) ────────────────────
+  // Uses whatever RPM we computed (will be set later in finishThrow, use pre-compute here)
+  // Quick zero-crossing estimate for this purpose
+  const relMagIdx=Math.min(Math.floor(t.releaseMs/mDt2/1000),mag.length-1);
+  const landMagIdx=t.landingMs!=null?Math.min(Math.floor(t.landingMs/mDt2/1000),mag.length):mag.length;
+  const flightMagSeg=mag.slice(Math.max(0,relMagIdx),landMagIdx);
+  let quickRPM=0;
+  if(flightMagSeg.length>=8){
+    let bR=0,bA='x';
+    for(const ax of['x','y','z']){let lo=Infinity,hi=-Infinity;
+      for(const s of flightMagSeg){if(s[ax]<lo)lo=s[ax];if(s[ax]>hi)hi=s[ax];}
+      if(hi-lo>bR){bR=hi-lo;bA=ax;}}
+    const sig=flightMagSeg.map(s=>s[bA]);
+    const mn2=sig.reduce((a,b)=>a+b,0)/sig.length;
+    let zc2=0;for(let i=1;i<sig.length;i++)if((sig[i-1]-mn2)*(sig[i]-mn2)<0)zc2++;
+    const dur2=(flightMagSeg.length-1)*mDt2;
+    quickRPM=dur2>0?Math.round(zc2/2/dur2*60):0;
+  }
+  const omegaEst=quickRPM/60*2*Math.PI;
+  const speedGiljarhus=omegaEst/5.2;
+
+  ext.speed={
+    accelInteg_ms:+speedAccelInt.toFixed(1),
+    accelInteg_mph:+(speedAccelInt*2.237).toFixed(1),
+    magInteg_ms:+speedMagInt.toFixed(1),
+    magInteg_mph:+(speedMagInt*2.237).toFixed(1),
+    giljarhus_ms:+speedGiljarhus.toFixed(1),
+    giljarhus_mph:+(speedGiljarhus*2.237).toFixed(1),
+    distTime_ms:t.estSpeed||null,
+    note:'AccelInteg=gravity-subtracted vector. MagInteg=|a|-g scalar. Giljarhus=spin/5.2. DistTime=GPS dist/flight time.'
+  };
+
+  // Use accel integration as primary speed estimate (if reasonable)
+  if(speedAccelInt>2&&speedAccelInt<50)t.estSpeed=+speedAccelInt.toFixed(1);
+
+  // ── LAUNCH ANGLE: velocity vector elevation ──────────────
+  // "Up" in sensor frame = -gravity_normalized
+  const upx=-gRef.x/cm,upy=-gRef.y/cm,upz=-gRef.z/cm;
+  const vVert=svx*upx+svy*upy+svz*upz;
+  const vHoriz=Math.sqrt(speedAccelInt**2-vVert**2);
+  const launchVel=vHoriz>0.1?+(Math.atan2(vVert,vHoriz)*180/Math.PI).toFixed(1):null;
+
+  ext.launch={
+    velocity_deg:launchVel,
+    note:'Elevation of integrated velocity vector at release relative to gravity horizontal.'
+  };
+
+  // ── WOBBLE: gyro X/Y analysis during flight ──────────────
+  const wStart=Math.min(relIdx+2,imu.length-1);
+  const wEnd=Math.min(landIdx>=0?landIdx:imu.length,imu.length);
+  const wWin=imu.slice(wStart,wEnd);
+
+  let wGxyPeak=0,wGxySum=0,wAccPeak=0;
+  const spinAx=spinKey; // 'gx','gy','gz' — already determined above
+  for(const s of wWin){
+    // Transverse gyro = all axes EXCEPT the spin axis
+    let tSq=0;
+    for(const k of['gx','gy','gz']){if(k!==spinAx)tSq+=s[k]**2;}
+    const gxy=Math.sqrt(tSq);
+    wGxySum+=gxy;if(gxy>wGxyPeak)wGxyPeak=gxy;
+    const axy=Math.sqrt(s.ax**2+s.ay**2+s.az**2);
+    if(axy>wAccPeak)wAccPeak=axy;
+  }
+  const wGxyAvg=wWin.length>0?wGxySum/wWin.length:0;
+  const avgSpin=wWin.length>0?wWin.reduce((a,s)=>a+Math.abs(s[spinAx]),0)/wWin.length:1;
+  const wobbleDeg=Math.atan2(wGxyPeak,Math.max(avgSpin,0.1))*180/Math.PI;
+
+  // Wobble trend: first half vs second half
+  let wTrend='unknown';
+  if(wWin.length>=10){
+    const half=Math.floor(wWin.length/2);
+    let f1=0,f2=0;
+    for(let i=0;i<half;i++){let tS=0;for(const k of['gx','gy','gz']){if(k!==spinAx)tS+=wWin[i][k]**2;}f1+=Math.sqrt(tS);}
+    for(let i=half;i<wWin.length;i++){let tS=0;for(const k of['gx','gy','gz']){if(k!==spinAx)tS+=wWin[i][k]**2;}f2+=Math.sqrt(tS);}
+    f1/=half;f2/=(wWin.length-half);
+    wTrend=f2<f1*0.8?'decaying':f2>f1*1.2?'growing':'stable';
+  }
+
+  ext.wobble={
+    angle_deg:+wobbleDeg.toFixed(1),
+    gyroXY_peak_dps:+(wGxyPeak*180/Math.PI).toFixed(0),
+    gyroXY_avg_dps:+(wGxyAvg*180/Math.PI).toFixed(0),
+    accelXY_peak:+wAccPeak.toFixed(1),
+    trend:wTrend,
+    spinAxis:spinAx,
+    note:'Angle=atan(transverse/spin). Trend: decaying=good clean throw.'
+  };
+
+  // ── SPIN DECAY: first half vs second half ────────────────
+  if(flightMagSeg.length>=16){
+    const hf=Math.floor(flightMagSeg.length/2);
+    const sp1=zcSpinSeg(flightMagSeg.slice(0,hf),mDt2);
+    const sp2=zcSpinSeg(flightMagSeg.slice(hf),mDt2);
+    ext.spinDecay={
+      firstHalf_rpm:sp1,secondHalf_rpm:sp2,
+      decay_rpm:sp1-sp2,
+      decay_pct:sp1>0?+((1-sp2/sp1)*100).toFixed(1):0,
+      note:'Zero-crossing RPM in first vs second half of flight segment.'
+    };
+  }
+
+  // ── GYRO Z RPM (cross-check, saturates at ~333 RPM) ──────
+  const gyroSpinVals=wWin.map(s=>Math.abs(s[spinAx]));
+  const avgGyroSpin=gyroSpinVals.length>0?gyroSpinVals.reduce((a,b)=>a+b,0)/gyroSpinVals.length:0;
+  ext.gyroRPM={
+    rpm:Math.round(avgGyroSpin/(2*Math.PI)*60),
+    saturated:avgGyroSpin>33,
+    raw_rads:+avgGyroSpin.toFixed(1),
+    note:'Direct gyro spin-axis reading. Saturates at ~333 RPM (34.9 rad/s for +/-2000dps).'
+  };
+
+  // ── ADVANCE RATIO ────────────────────────────────────────
+  const DISC_R=0.106; // 21.2cm diameter driver
+  const bestSpeed=speedAccelInt>2?speedAccelInt:speedGiljarhus;
+  ext.advanceRatio={
+    value:bestSpeed>0.5?+(omegaEst*DISC_R/bestSpeed).toFixed(3):null,
+    target_BH:0.50,target_FH:0.30,
+    note:'TechDisc formula: spin*radius/speed. Target ~0.50 backhand, ~0.30 forehand.'
+  };
+
+  // ── HYZER METHOD B: gyro integration from rest ───────────
+  // Track disc normal from rest through throw via gyro cross-product integration
+  let dnx=-N_.x,dny=-N_.y,dnz=-N_.z;
+  for(let i=0;i<Math.min(relIdx+1,imu.length);i++){
+    const wx2=imu[i].gx,wy2=imu[i].gy,wz2=imu[i].gz;
+    const cx2=wy2*dnz-wz2*dny,cy2=wz2*dnx-wx2*dnz,cz2=wx2*dny-wy2*dnx;
+    dnx+=cx2*iDt2;dny+=cy2*iDt2;dnz+=cz2*iDt2;
+    const len=Math.sqrt(dnx*dnx+dny*dny+dnz*dnz);
+    dnx/=len;dny/=len;dnz/=len;
+  }
+  // Decompose disc normal at release vs gravity
+  const dotNG=dnx*ux+dny*uy+dnz*uz; // dot with pre-throw gravity direction
+  const totalTilt=Math.acos(Math.min(1,Math.max(-1,Math.abs(dotNG))))*180/Math.PI;
+  // Project into hyzer/nose using same forward direction as Method A
+  const dnF=dnx*fx+dny*fy+dnz*fz;
+  const dnL=dnx*lx+dny*ly+dnz*lz;
+  const dnU=dnx*ux+dny*uy+dnz*uz;
+  ext.hyzerB={
+    gyroInteg_deg:+(Math.atan2(dnL,dnU)*180/Math.PI).toFixed(1),
+    totalTilt_deg:+totalTilt.toFixed(1),
+    note:'Method B: integrate gyro from rest, decompose disc normal. Compare with Method A (pre-throw gravity window).'
+  };
+  ext.noseB={
+    gyroInteg_deg:+(-Math.atan2(dnF,dnU)*180/Math.PI).toFixed(1),
+    note:'Method B: disc pitch from gyro-integrated normal. Compare with Method A.'
+  };
+
+  t.extMetrics=ext;
 }
 
 function fft(s){const N=s.length,m=new Float64Array(N/2);for(let k=0;k<N/2;k++){let re=0,im=0;
   for(let n=0;n<N;n++){const a=-2*Math.PI*k*n/N;re+=s[n]*Math.cos(a);im+=s[n]*Math.sin(a);}
   m[k]=Math.sqrt(re*re+im*im)/N;}return m;}
+
+// Zero-crossing spin for a mag segment
+function zcSpinSeg(samples,dt){
+  let bR=0,bA='x';
+  for(const ax of['x','y','z']){let lo=Infinity,hi=-Infinity;
+    for(const s of samples){if(s[ax]<lo)lo=s[ax];if(s[ax]>hi)hi=s[ax];}
+    if(hi-lo>bR){bR=hi-lo;bA=ax;}}
+  const sig=samples.map(s=>s[bA]);
+  const mn=sig.reduce((a,b)=>a+b,0)/sig.length;
+  let zc=0;for(let i=1;i<sig.length;i++)if((sig[i-1]-mn)*(sig[i]-mn)<0)zc++;
+  const dur=(sig.length-1)*dt;
+  return dur>0?Math.round(zc/2/dur*60):0;
+}
+
+// Render detailed metrics comparison panel
+function renderDetailedMetrics(t){
+  const p=document.getElementById('detailPanel');
+  const el=document.getElementById('detailBody');
+  if(!t.extMetrics){p.style.display='none';return;}
+  p.style.display='block';
+  const e=t.extMetrics;
+  const S=v=>v!=null?v:'--';
+  const row=(label,obj)=>{
+    const cells=Object.entries(obj).filter(([k])=>k!=='note')
+      .map(([k,v])=>`<span style="color:var(--mt)">${k}:</span> <b>${S(v)}</b>`).join(' | ');
+    const note=obj.note?`<div style="color:#334155;font-size:.6rem;margin-left:.8rem">${obj.note}</div>`:'';
+    return`<div style="margin-bottom:.4rem"><span style="color:var(--or)">${label}</span><br><span style="margin-left:.8rem">${cells}</span>${note}</div>`;
+  };
+  let h='';
+  h+='<div style="color:var(--bl);font-weight:700;margin-bottom:.3rem">Speed (3+1 methods)</div>';
+  h+=row('Speed',e.speed);
+  h+='<hr style="border-color:var(--bd);margin:.3rem 0">';
+  h+='<div style="color:var(--bl);font-weight:700;margin-bottom:.3rem">Angles (Method A vs B)</div>';
+  h+=row('Hyzer A (pre-throw gravity)',{deg:t.hyzerAngle!=null?t.hyzerAngle+'°':'--'});
+  h+=row('Hyzer B (gyro integration)',e.hyzerB);
+  h+=row('Nose A (pre-throw gravity)',{deg:t.noseAngle!=null?t.noseAngle+'°':'--'});
+  h+=row('Nose B (gyro integration)',e.noseB);
+  if(e.launch)h+=row('Launch Angle',e.launch);
+  h+='<hr style="border-color:var(--bd);margin:.3rem 0">';
+  h+='<div style="color:var(--bl);font-weight:700;margin-bottom:.3rem">Spin Cross-Check</div>';
+  h+=row('FFT vs ZC vs GyroZ',{FFT:t.peakRPM+'RPM',ZeroCross:t.crossRPM+'RPM',...e.gyroRPM});
+  if(e.spinDecay)h+=row('Spin Decay',e.spinDecay);
+  h+='<hr style="border-color:var(--bd);margin:.3rem 0">';
+  h+='<div style="color:var(--bl);font-weight:700;margin-bottom:.3rem">Wobble</div>';
+  h+=row('Wobble',e.wobble);
+  h+='<hr style="border-color:var(--bd);margin:.3rem 0">';
+  if(e.advanceRatio)h+=row('Advance Ratio',e.advanceRatio);
+  el.innerHTML=h;
+}
 
 // ═══════════════════════════════════════════════════════════
 // SUPABASE SYNC
@@ -605,6 +835,13 @@ async function syncThrow(t){
     peak_rpm:t.crossRPM||t.peakRPM,peak_g:t.peakG,flight_time_s:t.flightTime,
     est_speed_ms:t.estSpeed,spin_quality:t.spinQuality,
     hyzer_deg:t.hyzerAngle,nose_deg:t.noseAngle,
+    speed_accel_ms:t.extMetrics?.speed?.accelInteg_ms||null,
+    speed_giljarhus_ms:t.extMetrics?.speed?.giljarhus_ms||null,
+    wobble_deg:t.extMetrics?.wobble?.angle_deg||null,
+    wobble_trend:t.extMetrics?.wobble?.trend||null,
+    launch_angle_deg:t.extMetrics?.launch?.velocity_deg||null,
+    advance_ratio:t.extMetrics?.advanceRatio?.value||null,
+    gyro_rpm:t.extMetrics?.gyroRPM?.rpm||null,
     throw_type:t.throwType||null,effort:t.effort||null,notes:t.notes||null,
     mag_rate_hz:t.header?.magHz,imu_rate_hz:t.header?.imuHz,duration_s:t.duration};
   try{
@@ -659,7 +896,8 @@ async function exportSession(){
       weather:t.wx,
       analysis:{peak_rpm:t.peakRPM,cross_rpm:t.crossRPM,peak_g:t.peakG,flight_time_s:t.flightTime,est_speed_ms:t.estSpeed,
         spin_quality:t.spinQuality,hyzer_deg:t.hyzerAngle,nose_deg:t.noseAngle,
-        release_ms:t.releaseMs,landing_ms:t.landingMs},
+        release_ms:t.releaseMs,landing_ms:t.landingMs,
+        extended:t.extMetrics||null},
       labels:{throw_type:t.throwType,effort:t.effort,notes:t.notes},
       sensor:{mag_rate_hz:t.header.magHz,imu_rate_hz:t.header.imuHz,
         mag:t.magSamples.map(s=>({t:+s.t.toFixed(1),x:+s.x.toFixed(2),y:+s.y.toFixed(2),z:+s.z.toFixed(2)})),
