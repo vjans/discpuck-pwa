@@ -146,7 +146,7 @@ canvas{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);wi
 <!-- Metrics -->
 <div class="metrics" id="metricsGrid">
   <div class="mc"><div class="v" id="mDist" style="color:var(--or)">--</div><div class="u">Distance</div></div>
-  <div class="mc"><div class="v" id="mRPM" style="color:var(--pr)">--</div><div class="u">RPM</div></div>
+  <div class="mc"><div class="v" id="mRPM" style="color:var(--pr)">--</div><div class="u">RPM (ZC/FFT)</div></div>
   <div class="mc"><div class="v" id="mG" style="color:var(--rd)">--</div><div class="u">Peak G</div></div>
   <div class="mc"><div class="v" id="mSpd" style="color:var(--cy)">--</div><div class="u">Speed</div></div>
   <div class="mc"><div class="v" id="mHyz" style="color:var(--gn)">--</div><div class="u">Hyzer</div></div>
@@ -204,7 +204,7 @@ canvas{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);wi
 // ═══════════════════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════════════════
-const BUILD='apr14b | wall-clock timing + 3-axis FFT (fixes getEvent 3x inflation)';
+const BUILD='apr15a | zero-crossing RPM + wall-clock timing + 3-axis FFT';
 const SUPA_URL='https://fjptyllozsmlhxpahocd.supabase.co';
 const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqcHR5bGxvenNtbGh4cGFob2NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzA1NjMsImV4cCI6MjA5MTc0NjU2M30.Zx3kn4TBpGFjDfSeNgUHq86FAaNtNNFV-1F1g9b0Ynk';
 const BLE_SVC='19b10000-e8f2-537e-4f6c-d104768a1214';
@@ -430,7 +430,7 @@ function finishThrow(){
   const t={id:throws.length+1,time:new Date().toISOString(),collector,disc:document.getElementById('sDisc').value,
     tee:tee?{...tee}:null,landing:land,distance:dist,bearing:bear,wx:wx?{...wx}:null,
     header:{...savedHdr},magSamples:[...rxMag],imuSamples:[...rxImu],
-    duration:+dur.toFixed(1),peakRPM:rpm,peakG:+peakG.toFixed(1),
+    duration:+dur.toFixed(1),peakRPM:rpm,crossRPM:0,peakG:+peakG.toFixed(1),
     releaseMs:null,landingMs:null,flightTime:null,estSpeed:null,spinQuality:null,hyzerAngle:null,noseAngle:null,
     throwType:'',effort:'',notes:'',synced:false};
 
@@ -464,18 +464,35 @@ function finishThrow(){
     log('FFT: axis='+bestAx+' bin='+bestBin+' fRes='+fR.toFixed(2)+'Hz effSr='+sr.toFixed(0)+'Hz RPM='+t.peakRPM);
   }else{log('FFT skipped: only '+flightMag.length+' mag samples in flight window');}
 
+  // Zero-crossing RPM — count sign changes on best-amplitude axis
+  if(flightMag.length>=8&&t.flightTime>0){
+    let bRange=0,bAx='x';
+    for(const ax of ['x','y','z']){
+      let lo=Infinity,hi=-Infinity;
+      for(const s of flightMag){if(s[ax]<lo)lo=s[ax];if(s[ax]>hi)hi=s[ax];}
+      if(hi-lo>bRange){bRange=hi-lo;bAx=ax;}
+    }
+    const sig=flightMag.map(s=>s[bAx]);
+    const mn=sig.reduce((a,b)=>a+b,0)/sig.length;
+    let zc=0;
+    for(let i=1;i<sig.length;i++)if((sig[i-1]-mn)*(sig[i]-mn)<0)zc++;
+    t.crossRPM=Math.round(zc/2/t.flightTime*60);
+    log('ZeroCross: axis='+bAx+' range='+bRange.toFixed(1)+' crossings='+zc+' RPM='+t.crossRPM);
+  }
+
   throws.push(t);lastThrow=t;
   rxMag=[];rxImu=[];window._land=null;
   updateMetrics(t);setPhase('done');renderHist();drawPlot(t);
   syncThrow(t);
-  log('#'+t.id+': '+(dist?dist+'m ':'')+(t.peakRPM||0)+'RPM '+t.peakG+'g'+(t.flightTime?' '+t.flightTime+'s':''));
+  log('#'+t.id+': '+(dist?dist+'m ':'')+
+    'ZC='+(t.crossRPM||'--')+' FFT='+(t.peakRPM||'--')+'RPM '+t.peakG+'g'+(t.flightTime?' '+t.flightTime+'s':''));
   }catch(e){log('Error processing throw: '+e.message);console.error(e);setPhase('ready');}
 }
 
 function updateMetrics(t){
   const $ =id=>document.getElementById(id);
   $('mDist').textContent=t.distance?t.distance+'m':'--';
-  $('mRPM').textContent=t.peakRPM||'--';
+  $('mRPM').textContent=(t.crossRPM||'--')+' / '+(t.peakRPM||'--');
   $('mG').textContent=t.peakG?t.peakG+'g':'--';
   $('mSpd').textContent=t.estSpeed?t.estSpeed+'m/s':'--';
   $('mHyz').textContent=t.hyzerAngle!=null?t.hyzerAngle+'\u00B0':'--';
@@ -585,7 +602,7 @@ async function syncThrow(t){
     distance_m:t.distance,bearing_deg:t.bearing,
     temp_c:t.wx?.temp,wind_ms:t.wx?.wind,wind_dir_deg:t.wx?.dir,wind_gust_ms:t.wx?.gust,
     wx_station:t.wx?.station,wx_dist_m:t.wx?.stDist,
-    peak_rpm:t.peakRPM,peak_g:t.peakG,flight_time_s:t.flightTime,
+    peak_rpm:t.crossRPM||t.peakRPM,peak_g:t.peakG,flight_time_s:t.flightTime,
     est_speed_ms:t.estSpeed,spin_quality:t.spinQuality,
     hyzer_deg:t.hyzerAngle,nose_deg:t.noseAngle,
     throw_type:t.throwType||null,effort:t.effort||null,notes:t.notes||null,
@@ -625,7 +642,7 @@ function renderHist(){
     const sync=t.synced?'<span class="sync-ok">\u2713</span>':'<span class="sync-wait">\u2022</span>';
     return`<div class="hi" onclick="drawPlot(throws[${throws.length-1-i}])">
       <span class="num">#${t.id}</span>
-      <span class="det"><strong>${d}</strong> ${t.peakRPM}RPM ${t.peakG}g${t.throwType?' \u2022 '+t.throwType:''}</span>
+      <span class="det"><strong>${d}</strong> ${t.crossRPM||t.peakRPM}RPM ${t.peakG}g${t.throwType?' \u2022 '+t.throwType:''}</span>
       <span class="sync">${sync}</span>
     </div>`;}).join('');
 }
@@ -640,7 +657,7 @@ async function exportSession(){
       tee:t.tee?{lat:t.tee.lat,lon:t.tee.lon,acc:t.tee.acc}:null,
       landing:t.landing?{lat:t.landing.lat,lon:t.landing.lon,acc:t.landing.acc}:null,
       weather:t.wx,
-      analysis:{peak_rpm:t.peakRPM,peak_g:t.peakG,flight_time_s:t.flightTime,est_speed_ms:t.estSpeed,
+      analysis:{peak_rpm:t.peakRPM,cross_rpm:t.crossRPM,peak_g:t.peakG,flight_time_s:t.flightTime,est_speed_ms:t.estSpeed,
         spin_quality:t.spinQuality,hyzer_deg:t.hyzerAngle,nose_deg:t.noseAngle,
         release_ms:t.releaseMs,landing_ms:t.landingMs},
       labels:{throw_type:t.throwType,effort:t.effort,notes:t.notes},
