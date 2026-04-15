@@ -204,7 +204,7 @@ canvas{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);wi
 // ═══════════════════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════════════════
-const BUILD='fddbe40 | gyro thresh 20% for full flight arc';
+const BUILD='apr14b | wall-clock timing + 3-axis FFT (fixes getEvent 3x inflation)';
 const SUPA_URL='https://fjptyllozsmlhxpahocd.supabase.co';
 const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqcHR5bGxvenNtbGh4cGFob2NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzA1NjMsImV4cCI6MjA5MTc0NjU2M30.Zx3kn4TBpGFjDfSeNgUHq86FAaNtNNFV-1F1g9b0Ynk';
 const BLE_SVC='19b10000-e8f2-537e-4f6c-d104768a1214';
@@ -220,7 +220,7 @@ let collector=localStorage.getItem('dp_name')||'';
 let cal=null;try{cal=JSON.parse(localStorage.getItem('dp_cal'));}catch(e){}
 let tee=null,pos=null,wx=null;
 let throws=[],plotMode='mag',lastThrow=null;
-let hdr=null,rxMag=[],rxImu=[],calibrating=false,lastDataTs=0,dumpStartTs=0;
+let hdr=null,rxMag=[],rxImu=[],calibrating=false,lastDataTs=0,dumpStartTs=0,armTimeMs=0;
 let syncQueue=JSON.parse(localStorage.getItem('dp_queue')||'[]');
 
 // ═══════════════════════════════════════════════════════════
@@ -349,7 +349,7 @@ async function doAction(){
   if(phase==='setup'){if(await bleConnect()){if(!tee&&pos)tee={...pos};setPhase('ready');}}
   else if(phase==='ready'){
     if(!tee&&pos)tee={...pos};hdr=null;rxMag=[];rxImu=[];
-    if(ctrlC){await ctrlC.writeValue(new Uint8Array([0x01]));
+    if(ctrlC){armTimeMs=Date.now();await ctrlC.writeValue(new Uint8Array([0x01]));
       if(device?.gatt.connected)device.gatt.disconnect();setPhase('fly');log('Armed + DC');}
   }else if(phase==='fly'){
     window._land=pos?{...pos}:null;
@@ -407,9 +407,18 @@ function finishThrow(){
   const savedHdr={...hdr};hdr=null; // null immediately to prevent re-entry
   if(rxMag.length<10){setPhase('ready');return;}
   try{
-  const mDt=1000/savedHdr.magHz,iDt=1000/savedHdr.imuHz;
+  // Real duration: prefer wall-clock time (arm→dump) over firmware's magN/magHz
+  // because getEvent() blocks ~5ms/call, making actual rate ~160Hz not 500Hz.
+  // Wall-clock is ground truth; header rate is only a fallback.
+  const wallMs=armTimeMs>0?Date.now()-armTimeMs:0;
+  const hdrMs=savedHdr.magN/savedHdr.magHz*1000;
+  const realDurMs=wallMs>1000?wallMs:hdrMs; // use wall-clock if >1s, else header
+  const mDt=rxMag.length>1?realDurMs/(rxMag.length-1):2;
+  const iDt=rxImu.length>1?realDurMs/(rxImu.length-1):10;
   for(let i=0;i<rxMag.length;i++)rxMag[i].t=i*mDt;
   for(let i=0;i<rxImu.length;i++)rxImu[i].t=i*iDt;
+  log('BLE rx: '+rxMag.length+'/'+savedHdr.magN+' mag ('+Math.round(rxMag.length/savedHdr.magN*100)+'%), wall='+
+    (wallMs/1000).toFixed(1)+'s hdr='+((hdrMs)/1000).toFixed(1)+'s used='+(realDurMs/1000).toFixed(1)+'s effSr='+Math.round(1000/mDt)+'Hz');
 
   let rpm=0;
   let peakG=0;for(const s of rxImu){const g=Math.sqrt(s.ax*s.ax+s.ay*s.ay+s.az*s.az)/9.81;if(g>peakG)peakG=g;}
@@ -433,21 +442,26 @@ function finishThrow(){
     t.magSamples.length>0?t.magSamples[t.magSamples.length-1].t:0,
     t.imuSamples.length>0?t.imuSamples[t.imuSamples.length-1].t:0)||1;
 
-  // FFT on flight segment — clamp to actual data, use all available samples
-  const mDt2=1000/t.header.magHz;
-  const fftStart=Math.min(Math.max(0,t.releaseMs!=null?Math.floor(t.releaseMs/mDt2):0),t.magSamples.length-1);
-  const fftEnd=Math.min(t.landingMs!=null?Math.floor(t.landingMs/mDt2):t.magSamples.length,t.magSamples.length);
+  // FFT on flight segment — try all 3 mag axes, pick strongest peak
+  const fftStart=Math.min(Math.max(0,t.releaseMs!=null?Math.floor(t.releaseMs/mDt):0),t.magSamples.length-1);
+  const fftEnd=Math.min(t.landingMs!=null?Math.ceil(t.landingMs/mDt):t.magSamples.length,t.magSamples.length);
   const flightMag=t.magSamples.slice(fftStart,fftEnd);
-  log('FFT window: mag['+fftStart+':'+fftEnd+'] = '+flightMag.length+' samples (need 8+)');
+  const effSr=1000/mDt;
+  log('FFT: mag['+fftStart+':'+fftEnd+']='+flightMag.length+' samp, effSr='+effSr.toFixed(0)+'Hz (nom '+t.header.magHz+')');
   if(flightMag.length>=8){
-    const fN=flightMag.length; // use ALL samples, not just power-of-2
-    const sr=t.header.magHz,sig=flightMag.map(s=>s.x);
-    const mn=sig.reduce((a,b)=>a+b,0)/sig.length;
-    const h=sig.map((v,i)=>(v-mn)*.5*(1-Math.cos(2*Math.PI*i/(sig.length-1))));
-    const m=fft(h),fR=sr/fN;let pB=1,pM=0;
-    for(let k=Math.max(1,Math.floor(.5/fR));k<Math.min(m.length-1,Math.floor(sr/2/fR));k++)if(m[k]>pM){pM=m[k];pB=k;}
-    t.peakRPM=Math.round(pB*fR*60);
-    log('FFT: bin='+pB+' fRes='+fR.toFixed(1)+'Hz RPM='+t.peakRPM);
+    const fN=flightMag.length,sr=effSr,fR=sr/fN;
+    const kLo=Math.max(1,Math.floor(.5/fR)),kHi=Math.min(Math.floor(fN/2)-1,Math.floor(sr/2/fR));
+    let bestRPM=0,bestBin=0,bestAx='x',bestPk=0;
+    for(const ax of ['x','y','z']){
+      const sig=flightMag.map(s=>s[ax]);
+      const mn=sig.reduce((a,b)=>a+b,0)/sig.length;
+      const h=sig.map((v,i)=>(v-mn)*.5*(1-Math.cos(2*Math.PI*i/(sig.length-1))));
+      const m=fft(h);let pB=1,pM=0;
+      for(let k=kLo;k<kHi;k++)if(m[k]>pM){pM=m[k];pB=k;}
+      if(pM>bestPk){bestPk=pM;bestBin=pB;bestAx=ax;bestRPM=Math.round(pB*fR*60);}
+    }
+    t.peakRPM=bestRPM;
+    log('FFT: axis='+bestAx+' bin='+bestBin+' fRes='+fR.toFixed(2)+'Hz effSr='+sr.toFixed(0)+'Hz RPM='+t.peakRPM);
   }else{log('FFT skipped: only '+flightMag.length+' mag samples in flight window');}
 
   throws.push(t);lastThrow=t;
@@ -487,7 +501,9 @@ function lbl(key,val){
 function analyzeThrow(t){
   const imu=t.imuSamples,mag=t.magSamples;
   if(imu.length<20||mag.length<50)return;
-  const iDt=1000/t.header.imuHz,mDt=1000/t.header.magHz;
+  // Derive timing from sample timestamps (already set by finishThrow using wall-clock)
+  const iDt=imu.length>1?imu[imu.length-1].t/(imu.length-1):10;
+  const mDt=mag.length>1?mag[mag.length-1].t/(mag.length-1):2;
   // ── Find flight via gyro spin-up / spin-down ──
   // Auto-detect spin axis by highest TOTAL SUM (sustained spin, not brief spikes)
   let gxS=0,gyS=0,gzS=0;
@@ -504,7 +520,7 @@ function analyzeThrow(t){
   for(let i=spinVals.length-1;i>=0;i--){if(spinVals[i]>SPIN_THRESH){landIdx=i;break;}}
 
   // Need at least 50ms of flight
-  if(relIdx<0||landIdx<0||landIdx-relIdx<Math.floor(0.05*t.header.imuHz)){relIdx=0;landIdx=-1;}
+  if(relIdx<0||landIdx<0||landIdx-relIdx<Math.floor(50/iDt)){relIdx=0;landIdx=-1;}
 
   t.releaseMs=+(relIdx*iDt).toFixed(0);
   t.landingMs=landIdx>=0?+(landIdx*iDt).toFixed(0):null;
@@ -540,8 +556,8 @@ function analyzeThrow(t){
   fx/=fm2;fy/=fm2;fz/=fm2;
   const lx=N_.y*fz-N_.z*fy,ly=N_.z*fx-N_.x*fz,lz=N_.x*fy-N_.y*fx;
   // Gravity from 1-2s BEFORE release (disc in hand at intended angle)
-  const preStart=Math.max(0,relIdx-Math.floor(2*t.header.imuHz));
-  const preEnd=Math.max(0,relIdx-Math.floor(0.5*t.header.imuHz));
+  const preStart=Math.max(0,relIdx-Math.floor(2000/iDt));
+  const preEnd=Math.max(0,relIdx-Math.floor(500/iDt));
   if(preEnd<=preStart)return;
   const preWin=imu.slice(preStart,preEnd);if(preWin.length<10)return;
   let ux=0,uy=0,uz=0;for(const s of preWin){ux+=s.ax;uy+=s.ay;uz+=s.az;}
