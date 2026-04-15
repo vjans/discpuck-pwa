@@ -143,14 +143,28 @@ canvas{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);wi
   <div class="tee-info" id="teeInfo"></div>
 </div>
 
-<!-- Metrics -->
+<!-- Metrics — primary row -->
 <div class="metrics" id="metricsGrid">
-  <div class="mc"><div class="v" id="mDist" style="color:var(--or)">--</div><div class="u">Distance</div></div>
   <div class="mc"><div class="v" id="mRPM" style="color:var(--pr)">--</div><div class="u">RPM (ZC/FFT)</div></div>
+  <div class="mc"><div class="v" id="mSpd" style="color:var(--cy)">--</div><div class="u">Speed (m/s)</div></div>
   <div class="mc"><div class="v" id="mG" style="color:var(--rd)">--</div><div class="u">Peak G</div></div>
-  <div class="mc"><div class="v" id="mSpd" style="color:var(--cy)">--</div><div class="u">Speed</div></div>
   <div class="mc"><div class="v" id="mHyz" style="color:var(--gn)">--</div><div class="u">Hyzer</div></div>
   <div class="mc"><div class="v" id="mNose" style="color:var(--bl)">--</div><div class="u">Nose</div></div>
+  <div class="mc"><div class="v" id="mLaunch" style="color:var(--or)">--</div><div class="u">Launch Angle</div></div>
+</div>
+<!-- Metrics — secondary row -->
+<div class="metrics" style="grid-template-columns:repeat(4,1fr)">
+  <div class="mc"><div class="v" id="mWobble" style="color:var(--rd)">--</div><div class="u">Wobble</div></div>
+  <div class="mc"><div class="v" id="mWobTrend" style="color:var(--mt)">--</div><div class="u">Wobble Trend</div></div>
+  <div class="mc"><div class="v" id="mADV" style="color:var(--cy)">--</div><div class="u">Advance Ratio</div></div>
+  <div class="mc"><div class="v" id="mSpinQ" style="color:var(--pr)">--</div><div class="u">Spin Quality</div></div>
+</div>
+<!-- Metrics — info row -->
+<div class="metrics" style="grid-template-columns:repeat(4,1fr)">
+  <div class="mc"><div class="v" id="mDist" style="color:var(--or)">--</div><div class="u">Distance</div></div>
+  <div class="mc"><div class="v" id="mFlight" style="color:var(--gn)">--</div><div class="u">Flight Time</div></div>
+  <div class="mc"><div class="v" id="mDecay" style="color:var(--mt)">--</div><div class="u">Spin Decay</div></div>
+  <div class="mc"><div class="v" id="mGyroRPM" style="color:var(--mt)">--</div><div class="u">Gyro RPM</div></div>
 </div>
 
 <!-- Detailed metrics comparison (collapsible) -->
@@ -496,13 +510,27 @@ function finishThrow(){
 }
 
 function updateMetrics(t){
-  const $ =id=>document.getElementById(id);
-  $('mDist').textContent=t.distance?t.distance+'m':'--';
+  const $=id=>document.getElementById(id);
+  const e=t.extMetrics||{};
+  // Primary
   $('mRPM').textContent=(t.crossRPM||'--')+' / '+(t.peakRPM||'--');
+  $('mSpd').textContent=t.estSpeed?t.estSpeed:'--';
   $('mG').textContent=t.peakG?t.peakG+'g':'--';
-  $('mSpd').textContent=t.estSpeed?t.estSpeed+'m/s':'--';
   $('mHyz').textContent=t.hyzerAngle!=null?t.hyzerAngle+'\u00B0':'--';
   $('mNose').textContent=t.noseAngle!=null?t.noseAngle+'\u00B0':'--';
+  $('mLaunch').textContent=e.launch?.velocity_deg!=null?e.launch.velocity_deg+'\u00B0':'--';
+  // Secondary
+  $('mWobble').textContent=e.wobble?.angle_deg!=null?e.wobble.angle_deg+'\u00B0':'--';
+  $('mWobTrend').textContent=e.wobble?.trend||'--';
+  $('mWobTrend').style.color=e.wobble?.trend==='decaying'?'var(--gn)':e.wobble?.trend==='growing'?'var(--rd)':'var(--mt)';
+  $('mADV').textContent=e.advanceRatio?.value!=null?e.advanceRatio.value:'--';
+  $('mSpinQ').textContent=t.spinQuality!=null?t.spinQuality+'%':'--';
+  // Info
+  $('mDist').textContent=t.distance?t.distance+'m':'--';
+  $('mFlight').textContent=t.flightTime?t.flightTime+'s':'--';
+  $('mDecay').textContent=e.spinDecay?e.spinDecay.decay_pct+'%':'--';
+  $('mGyroRPM').textContent=e.gyroRPM?(e.gyroRPM.rpm+(e.gyroRPM.saturated?' SAT':'')):'--';
+  $('mGyroRPM').style.color=e.gyroRPM?.saturated?'var(--rd)':'var(--mt)';
   document.querySelectorAll('.mc').forEach(el=>{el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');});
 }
 
