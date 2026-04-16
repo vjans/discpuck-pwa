@@ -187,6 +187,13 @@ canvas{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);wi
     <span class="chip" onclick="lbl('effort','75%')">75</span>
     <span class="chip" onclick="lbl('effort','100%')">100</span>
   </div>
+  <div class="group" style="flex:1;min-width:200px">
+    <span class="gl">Note</span>
+    <input id="noteInput" type="text" placeholder="e.g. drop 1m, slide 2m, toss hyzer"
+      style="flex:1;background:var(--bg);border:1px solid var(--bd);color:var(--tx);padding:.2rem .5rem;
+      border-radius:6px;font-size:.75rem;font-weight:600"
+      onchange="lbl('notes',this.value)" onkeydown="if(event.key==='Enter'){lbl('notes',this.value);this.blur();}">
+  </div>
 </div>
 
 <!-- Plot -->
@@ -502,7 +509,7 @@ function finishThrow(){
 
   throws.push(t);lastThrow=t;
   rxMag=[];rxImu=[];window._land=null;
-  updateMetrics(t);renderDetailedMetrics(t);setPhase('done');renderHist();drawPlot(t);
+  updateMetrics(t);renderDetailedMetrics(t);setPhase('done');updateLabelUI(t);renderHist();drawPlot(t);
   syncThrow(t);
   log('#'+t.id+': '+(dist?dist+'m ':'')+
     'ZC='+(t.crossRPM||'--')+' FFT='+(t.peakRPM||'--')+'RPM '+t.peakG+'g'+(t.flightTime?' '+t.flightTime+'s':''));
@@ -543,7 +550,15 @@ function lbl(key,val){
     const k=c.onclick.toString().match(/'(\w+)','(.+?)'/);
     if(k)c.className='chip'+(lastThrow[k[1]]===k[2]?' on':'');
   });
+  if(key==='notes')document.getElementById('noteInput').value=val;
   syncThrow(lastThrow);
+}
+function updateLabelUI(t){
+  document.querySelectorAll('.chip').forEach(c=>{
+    const k=c.onclick.toString().match(/'(\w+)','(.+?)'/);
+    if(k)c.className='chip'+(t[k[1]]===k[2]?' on':'');
+  });
+  document.getElementById('noteInput').value=t.notes||'';
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -905,9 +920,9 @@ function renderHist(){
     const idx=throws.length-i;
     const d=t.distance?t.distance+'m':'--';
     const sync=t.synced?'<span class="sync-ok">\u2713</span>':'<span class="sync-wait">\u2022</span>';
-    return`<div class="hi" onclick="drawPlot(throws[${throws.length-1-i}])">
+    return`<div class="hi" onclick="lastThrow=throws[${throws.length-1-i}];updateMetrics(lastThrow);renderDetailedMetrics(lastThrow);updateLabelUI(lastThrow);drawPlot(lastThrow)">
       <span class="num">#${t.id}</span>
-      <span class="det"><strong>${d}</strong> ${t.crossRPM||t.peakRPM}RPM ${t.peakG}g${t.throwType?' \u2022 '+t.throwType:''}</span>
+      <span class="det"><strong>${d}</strong> ${t.crossRPM||t.peakRPM}RPM ${t.peakG}g${t.throwType?' \u2022 '+t.throwType:''}${t.notes?' \u2022 '+t.notes:''}</span>
       <span class="sync">${sync}</span>
     </div>`;}).join('');
 }
