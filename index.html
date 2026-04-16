@@ -231,7 +231,7 @@ canvas{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);wi
 // ═══════════════════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════════════════
-const BUILD='apr15b | multi-method metrics: speed(3), wobble, launch angle, spin decay, advance ratio';
+let BUILD='loading...';
 const SUPA_URL='https://fjptyllozsmlhxpahocd.supabase.co';
 const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqcHR5bGxvenNtbGh4cGFob2NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzA1NjMsImV4cCI6MjA5MTc0NjU2M30.Zx3kn4TBpGFjDfSeNgUHq86FAaNtNNFV-1F1g9b0Ynk';
 const BLE_SVC='19b10000-e8f2-537e-4f6c-d104768a1214';
@@ -1048,6 +1048,13 @@ function log(m){const e=document.getElementById('log');
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.getElementById('buildInfo').textContent='Build: '+BUILD;
+fetch('https://api.github.com/repos/vjans/discpuck-pwa/commits/master')
+  .then(r=>r.json()).then(d=>{
+    const sha=d.sha?.slice(0,7);const msg=d.commit?.message?.split('\n')[0]?.slice(0,60);
+    const date=d.commit?.committer?.date?.slice(0,16).replace('T',' ');
+    BUILD=sha+' | '+date+' | '+msg;
+    document.getElementById('buildInfo').textContent=BUILD;
+  }).catch(()=>{document.getElementById('buildInfo').textContent='Build: offline';});
 checkOnboard();startGPS();setPhase('setup');renderCal();renderHist();
 retrySyncQueue();
 if(!navigator.bluetooth)log('No Web Bluetooth. Use Bluefy on iOS.');
