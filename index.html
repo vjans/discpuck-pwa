@@ -886,7 +886,9 @@ async function syncThrow(t){
     advance_ratio:t.extMetrics?.advanceRatio?.value||null,
     gyro_rpm:t.extMetrics?.gyroRPM?.rpm||null,
     throw_type:t.throwType||null,effort:t.effort||null,notes:t.notes||null,
-    mag_rate_hz:t.header?.magHz,imu_rate_hz:t.header?.imuHz,duration_s:t.duration};
+    mag_rate_hz:t.header?.magHz,imu_rate_hz:t.header?.imuHz,duration_s:t.duration,
+    raw_mag:t.magSamples?.map(s=>[+s.x.toFixed(2),+s.y.toFixed(2),+s.z.toFixed(2)])||null,
+    raw_imu:t.imuSamples?.map(s=>[+s.ax.toFixed(3),+s.ay.toFixed(3),+s.az.toFixed(3),+s.gx.toFixed(3),+s.gy.toFixed(3),+s.gz.toFixed(3)])||null};
   try{
     const r=await fetch(SUPA_URL+'/rest/v1/throws',{method:'POST',headers:{
       'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
