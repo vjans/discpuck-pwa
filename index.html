@@ -1004,7 +1004,7 @@ function renderLoop(){
   // Completion detection: stall (1.5s no data) OR hard timeout (15s total)
   if(hdr&&rxMag.length>10){
     const stalled=lastDataTs>0&&Date.now()-lastDataTs>1500;
-    const timeout=dumpStartTs>0&&Date.now()-dumpStartTs>15000;
+    const timeout=dumpStartTs>0&&Date.now()-dumpStartTs>120000; // 2 min timeout
     if(stalled||timeout){
       const pct=Math.floor((rxMag.length+rxImu.length)/(hdr.magN+hdr.imuN)*100);
       log('Dump '+(stalled?'stalled':'timeout')+' at '+pct+'% ('+rxMag.length+'mag+'+rxImu.length+'imu), finishing');
