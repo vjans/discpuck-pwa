@@ -46,14 +46,39 @@ body{font-family:-apple-system,system-ui,'Segoe UI',sans-serif;background:var(--
 .hint{margin-top:.4rem;font-size:.75rem;color:var(--mt)}
 .tee-info{font-size:.7rem;color:var(--mt);margin-top:.2rem}
 
-/* Metrics grid */
+/* Status card */
+.status-card{background:linear-gradient(135deg,var(--sf),var(--cd));border:1px solid var(--bd);
+  border-radius:var(--r);padding:.7rem .8rem;margin-bottom:.5rem;font-size:.8rem}
+.status-card .row{display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap}
+.status-card .row+.row{margin-top:.35rem}
+.status-card .lbl{color:var(--mt);font-size:.7rem;text-transform:uppercase;letter-spacing:.4px}
+.status-card .val{color:var(--tx);font-weight:600;font-family:'SF Mono',ui-monospace,monospace}
+.status-card .ok{color:var(--gn)} .status-card .warn{color:var(--or)} .status-card .err{color:var(--rd)}
+.status-card .big{font-size:.95rem;font-weight:700}
+.status-card.fly{border-color:var(--pr);background:linear-gradient(135deg,#2a1f3a,#1a2230)}
+.status-card.recv{border-color:var(--gn);background:linear-gradient(135deg,#1a2f1f,#12181f)}
+.status-card.done{border-color:var(--bl)}
+.live-dist{font-size:1.4rem;font-weight:800;color:var(--or);font-family:'SF Mono',ui-monospace,monospace}
+
+/* Hero metrics — 3 big numbers */
+.hero{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin-bottom:.5rem}
+.hero .mc{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:.9rem .3rem;
+  text-align:center;transition:all .3s}
+.hero .mc.flash{animation:flashIn .4s ease-out}
+.hero .mc .v{font-size:2rem;font-weight:800;font-family:'SF Mono',ui-monospace,monospace;line-height:1}
+.hero .mc .u{font-size:.65rem;color:var(--mt);text-transform:uppercase;letter-spacing:.6px;margin-top:.3rem;font-weight:600}
+.hero .mc.hero-dist .v{color:var(--or)}
+.hero .mc.hero-spin .v{color:var(--pr)}
+.hero .mc.hero-speed .v{color:var(--cy)}
+
+/* Secondary metrics grid (smaller, 6 cells) */
 .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:.35rem;margin-bottom:.4rem}
 .mc{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:.5rem .3rem;
   text-align:center;transition:all .3s}
 .mc.flash{animation:flashIn .4s ease-out}
 @keyframes flashIn{from{transform:scale(1.1);opacity:0}to{transform:scale(1);opacity:1}}
-.mc .v{font-size:1.3rem;font-weight:800;font-family:'SF Mono',ui-monospace,monospace;line-height:1.2}
-.mc .u{font-size:.6rem;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-top:.1rem}
+.mc .v{font-size:1.05rem;font-weight:800;font-family:'SF Mono',ui-monospace,monospace;line-height:1.2}
+.mc .u{font-size:.58rem;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-top:.15rem}
 
 /* Quick labels */
 .labels{display:flex;flex-wrap:wrap;gap:.25rem;margin-bottom:.4rem;justify-content:center}
@@ -138,38 +163,45 @@ canvas{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);wi
 
 <!-- Action -->
 <div class="act">
-  <button class="btn-connect" id="actBtn" onclick="doAction()">CONNECT</button>
-  <div class="hint" id="actHint">Pair with your VicDisc sensor</div>
-  <div class="tee-info" id="teeInfo"></div>
+  <button class="btn-connect" id="actBtn" onclick="doAction()">CONNECT PUCK</button>
+  <div class="hint" id="actHint">Pair over Bluetooth to begin</div>
 </div>
 
-<!-- Metrics — primary row -->
-<div class="metrics" id="metricsGrid">
-  <div class="mc"><div class="v" id="mRPM" style="color:var(--pr)">--</div><div class="u">RPM (ZC/FFT)</div></div>
-  <div class="mc"><div class="v" id="mSpd" style="color:var(--cy)">--</div><div class="u">Speed (m/s)</div></div>
-  <div class="mc"><div class="v" id="mG" style="color:var(--rd)">--</div><div class="u">Peak G</div></div>
-  <div class="mc"><div class="v" id="mHyz" style="color:var(--gn)">--</div><div class="u">Hyzer</div></div>
-  <div class="mc"><div class="v" id="mNose" style="color:var(--bl)">--</div><div class="u">Nose</div></div>
-  <div class="mc"><div class="v" id="mLaunch" style="color:var(--or)">--</div><div class="u">Launch Angle</div></div>
-</div>
-<!-- Metrics — secondary row -->
-<div class="metrics" style="grid-template-columns:repeat(4,1fr)">
-  <div class="mc"><div class="v" id="mWobble" style="color:var(--rd)">--</div><div class="u">Wobble</div></div>
-  <div class="mc"><div class="v" id="mWobTrend" style="color:var(--mt)">--</div><div class="u">Wobble Trend</div></div>
-  <div class="mc"><div class="v" id="mADV" style="color:var(--cy)">--</div><div class="u">Advance Ratio</div></div>
-  <div class="mc"><div class="v" id="mSpinQ" style="color:var(--pr)">--</div><div class="u">Spin Quality</div></div>
-</div>
-<!-- Metrics — info row -->
-<div class="metrics" style="grid-template-columns:repeat(4,1fr)">
-  <div class="mc"><div class="v" id="mDist" style="color:var(--or)">--</div><div class="u">Distance</div></div>
-  <div class="mc"><div class="v" id="mFlight" style="color:var(--gn)">--</div><div class="u">Flight Time</div></div>
-  <div class="mc"><div class="v" id="mDecay" style="color:var(--mt)">--</div><div class="u">Spin Decay</div></div>
-  <div class="mc"><div class="v" id="mGyroRPM" style="color:var(--mt)">--</div><div class="u">Gyro RPM</div></div>
+<!-- Status card — context-sensitive guidance -->
+<div class="status-card" id="statusCard"></div>
+
+<!-- Hero metrics — the three numbers you actually care about -->
+<div class="hero" id="heroRow">
+  <div class="mc hero-dist"><div class="v" id="mDist">--</div><div class="u">Distance</div></div>
+  <div class="mc hero-spin"><div class="v" id="mRPM">--</div><div class="u">Spin (RPM)</div></div>
+  <div class="mc hero-speed"><div class="v" id="mSpd">--</div><div class="u">Speed (m/s)</div></div>
 </div>
 
-<!-- Detailed metrics comparison (collapsible) -->
+<!-- Secondary metrics — collapsible -->
+<details class="panel" id="secondaryPanel" style="margin-bottom:.4rem">
+  <summary>More metrics</summary>
+  <div class="metrics" style="margin-top:.4rem">
+    <div class="mc"><div class="v" id="mG" style="color:var(--rd)">--</div><div class="u">Peak G</div></div>
+    <div class="mc"><div class="v" id="mFlight" style="color:var(--gn)">--</div><div class="u">Flight Time</div></div>
+    <div class="mc"><div class="v" id="mLaunch" style="color:var(--or)">--</div><div class="u">Launch</div></div>
+    <div class="mc"><div class="v" id="mHyz" style="color:var(--gn)">--</div><div class="u">Hyzer</div></div>
+    <div class="mc"><div class="v" id="mNose" style="color:var(--bl)">--</div><div class="u">Nose</div></div>
+    <div class="mc"><div class="v" id="mWobble" style="color:var(--rd)">--</div><div class="u">Wobble</div></div>
+  </div>
+  <div class="metrics" style="grid-template-columns:repeat(4,1fr);margin-top:.35rem">
+    <div class="mc"><div class="v" id="mWobTrend" style="color:var(--mt)">--</div><div class="u">Wob Trend</div></div>
+    <div class="mc"><div class="v" id="mADV" style="color:var(--cy)">--</div><div class="u">Adv. Ratio</div></div>
+    <div class="mc"><div class="v" id="mSpinQ" style="color:var(--pr)">--</div><div class="u">Spin Qual.</div></div>
+    <div class="mc"><div class="v" id="mGyroRPM" style="color:var(--mt)">--</div><div class="u">Gyro RPM</div></div>
+  </div>
+  <div class="metrics" style="grid-template-columns:repeat(4,1fr);margin-top:.35rem">
+    <div class="mc"><div class="v" id="mDecay" style="color:var(--mt)">--</div><div class="u">Spin Decay</div></div>
+  </div>
+</details>
+
+<!-- Developer / multi-method panel -->
 <details class="panel" id="detailPanel" style="display:none">
-  <summary>Detailed Metrics (Multi-Method Comparison)</summary>
+  <summary>Developer metrics (multi-method)</summary>
   <div id="detailBody" style="font-family:ui-monospace,monospace;font-size:.7rem;line-height:1.7;margin-top:.3rem;overflow-x:auto"></div>
 </details>
 
@@ -196,13 +228,16 @@ canvas{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);wi
   </div>
 </div>
 
-<!-- Plot -->
-<div class="plot-bar">
-  <button class="on" id="pM" onclick="setP('mag')">Mag</button>
-  <button id="pA" onclick="setP('acc')">Accel</button>
-  <button id="pG" onclick="setP('gyr')">Gyro</button>
-</div>
-<canvas id="plot" height="160"></canvas>
+<!-- Plot (hidden behind toggle — dev/debug view) -->
+<details class="panel" id="plotPanel">
+  <summary>Raw sensor plot</summary>
+  <div class="plot-bar" style="margin-top:.3rem">
+    <button class="on" id="pM" onclick="setP('mag')">Mag</button>
+    <button id="pA" onclick="setP('acc')">Accel</button>
+    <button id="pG" onclick="setP('gyr')">Gyro</button>
+  </div>
+  <canvas id="plot" height="160"></canvas>
+</details>
 
 <!-- History -->
 <div class="hist-title"><span>Throw History</span><span id="syncStatus"></span></div>
@@ -345,7 +380,8 @@ function onData(e){
   if(hdr){
     lastDataTs=Date.now();
     const p=Math.floor((rxMag.length+rxImu.length)/(hdr.magN+hdr.imuN)*100);
-    document.getElementById('actBtn').textContent='RECEIVING '+Math.min(p,100)+'%';
+    const pctEl=document.getElementById('recvPct');
+    if(pctEl)pctEl.textContent=Math.min(p,100)+'%';
     // Auto-complete when all expected data received (don't wait for DONE status)
     if(rxMag.length>=hdr.magN&&rxImu.length>=hdr.imuN){
       if(calibrating)finishCal();else finishThrow();
@@ -363,23 +399,34 @@ function onStat(e){
 function setPhase(p){
   phase=p;const btn=document.getElementById('actBtn'),hint=document.getElementById('actHint');
   btn.className='';
-  if(p==='setup'){btn.className='btn-connect';btn.textContent='CONNECT';hint.textContent='Pair with your VicDisc sensor';}
-  else if(p==='ready'){btn.className='btn-throw';btn.textContent='THROW';hint.textContent='Arms sensor + disconnects. Then throw!';}
-  else if(p==='fly'){btn.className='btn-landed';btn.textContent='LANDED';hint.textContent='Tap when at disc landing spot';}
-  else if(p==='recv'){btn.className='btn-recv';btn.textContent='RECEIVING...';hint.textContent='';}
-  else if(p==='done'){btn.className='btn-next';btn.textContent='NEXT THROW';hint.textContent='';
+  if(p==='setup'){btn.className='btn-connect';btn.textContent='CONNECT PUCK';hint.textContent='Pair over Bluetooth to begin';}
+  else if(p==='ready'){btn.className='btn-throw';btn.textContent='START THROW';hint.textContent='Arms the sensor, then disconnects so you can throw';}
+  else if(p==='fly'){btn.className='btn-landed';btn.textContent="I'M AT MY DISC";hint.textContent='Walk to your disc, then tap to mark landing and download throw';}
+  else if(p==='recv'){btn.className='btn-recv';btn.textContent='DOWNLOADING…';hint.textContent='Transferring throw data from puck';}
+  else if(p==='done'){btn.className='btn-next';btn.textContent='NEW THROW';hint.textContent='Labels below will save to this throw';
     document.getElementById('labelBar').style.display='flex';}
-  updateTee();
+  renderStatus();updateTee();
 }
 
 async function doAction(){
   if(phase==='setup'){if(await bleConnect()){if(!tee&&pos)tee={...pos};setPhase('ready');}}
   else if(phase==='ready'){
-    if(!tee&&pos)tee={...pos};hdr=null;rxMag=[];rxImu=[];
+    // Re-set tee to current GPS on every throw — user just walked to (or is at) the tee box
+    if(pos)tee={...pos};
+    hdr=null;rxMag=[];rxImu=[];
     if(ctrlC){armTimeMs=Date.now();await ctrlC.writeValue(new Uint8Array([0x01]));
       if(device?.gatt.connected)device.gatt.disconnect();setPhase('fly');log('Armed + DC');}
   }else if(phase==='fly'){
-    window._land=pos?{...pos}:null;
+    const land=pos?{...pos}:null;
+    // Landing-sanity guard: if tee and landing are essentially the same spot, confirm
+    if(land&&tee){
+      const d=haversine(tee.lat,tee.lon,land.lat,land.lon);
+      if(d<5){
+        const ok=confirm('Landing is '+d.toFixed(1)+' m from tee.\n\nAre you sure you walked to your disc? Tap Cancel to stay in this phase and try again once GPS updates.');
+        if(!ok)return;
+      }
+    }
+    window._land=land;
     if(await bleConnect())await ctrlC.writeValue(new Uint8Array([0x03]));
   }else if(phase==='done'){
     document.getElementById('labelBar').style.display='none';
@@ -387,11 +434,57 @@ async function doAction(){
   }
 }
 
-function setTee(){if(pos){tee={...pos};updateTee();log('Tee updated');}}
-function updateTee(){
-  const el=document.getElementById('teeInfo');
-  el.textContent=tee?`Tee: ${tee.lat.toFixed(5)}, ${tee.lon.toFixed(5)} (\u00B1${tee.acc}m)`:'No tee set';
+function setTee(){if(pos){tee={...pos};updateTee();renderStatus();log('Tee updated');}}
+function updateTee(){} // kept for call-sites; real UI is now in renderStatus()
+
+// ── Status card: context-sensitive guidance for each phase ──
+function renderStatus(){
+  const el=document.getElementById('statusCard');if(!el)return;
+  el.className='status-card';
+  const todayThrows=throws.filter(t=>{const d=new Date(t.time);const n=new Date();return d.toDateString()===n.toDateString();});
+  const calOK=cal?'<span class="ok">\u2713 Calibrated</span>':'<span class="warn">\u26A0 Not calibrated</span>';
+  const discName=document.getElementById('sDisc')?.value||'Discmania Genius';
+  if(phase==='setup'){
+    el.innerHTML=`<div class="row"><span class="lbl">Step 1</span><span class="val">Connect your puck</span></div>
+      <div class="row"><span class="lbl">Disc</span><span class="val">${discName}</span></div>
+      <div class="row"><span class="lbl">Sensor</span><span>${calOK}</span></div>`;
+  } else if(phase==='ready'){
+    const teeTxt=tee?`${tee.lat.toFixed(5)}, ${tee.lon.toFixed(5)} (\u00B1${tee.acc}m)`:'<span class="warn">waiting for GPS…</span>';
+    const lastT=throws[throws.length-1];
+    const last=lastT?`<span class="val">${lastT.distance?lastT.distance+' m':'--'} \u2022 ${lastT.crossRPM||lastT.peakRPM||'--'} RPM \u2022 ${lastT.peakG||'--'} g</span>`:'<span class="val">none yet</span>';
+    el.innerHTML=`<div class="row"><span class="lbl">Ready</span><span class="big val">${discName}</span></div>
+      <div class="row"><span class="lbl">Tee</span><span class="val" style="font-size:.75rem">${teeTxt}</span></div>
+      <div class="row"><span class="lbl">Today</span><span class="val">${todayThrows.length} throws</span></div>
+      <div class="row"><span class="lbl">Last</span>${last}</div>`;
+  } else if(phase==='fly'){
+    el.className='status-card fly';
+    const live=(tee&&pos)?haversine(tee.lat,tee.lon,pos.lat,pos.lon).toFixed(1):'--';
+    const gpsAge=gpsH.length?Math.round((Date.now()-gpsH[gpsH.length-1].t)/1000):null;
+    const gpsTxt=gpsAge!=null?`<span class="${gpsAge<5?'ok':'warn'}">${gpsAge}s ago</span>`:'<span class="err">no fix</span>';
+    el.innerHTML=`<div class="row"><span class="lbl">\u26A1 Armed</span><span class="big val">Throw, then walk to your disc</span></div>
+      <div class="row"><span class="lbl">Distance from tee</span><span class="live-dist" id="liveDist">${live} m</span></div>
+      <div class="row"><span class="lbl">GPS update</span>${gpsTxt}</div>`;
+  } else if(phase==='recv'){
+    el.className='status-card recv';
+    el.innerHTML=`<div class="row"><span class="lbl">\u2193 Downloading</span><span class="big val" id="recvPct">0%</span></div>
+      <div class="row"><span class="lbl">Hold still</span><span class="val">Puck stays in range during transfer</span></div>`;
+  } else if(phase==='done'){
+    el.className='status-card done';
+    const lt=lastThrow;
+    const dist=lt?.distance?lt.distance+' m':'no landing marked';
+    const spin=lt?.crossRPM||lt?.peakRPM||'--';
+    el.innerHTML=`<div class="row"><span class="lbl">\u2713 Throw saved</span><span class="big val">${dist} \u2022 ${spin} RPM</span></div>
+      <div class="row"><span class="lbl">Tag it below</span><span class="val" style="font-size:.7rem">type, effort, notes (optional)</span></div>`;
+  }
 }
+
+// Keep live distance and GPS age updated while in fly phase
+setInterval(()=>{
+  if(phase!=='fly')return;
+  const el=document.getElementById('liveDist');if(!el)return;
+  const live=(tee&&pos)?haversine(tee.lat,tee.lon,pos.lat,pos.lon).toFixed(1):'--';
+  el.textContent=live+' m';
+},500);
 
 // ═══════════════════════════════════════════════════════════
 // CALIBRATION
@@ -434,18 +527,19 @@ function finishThrow(){
   const savedHdr={...hdr};hdr=null; // null immediately to prevent re-entry
   if(rxMag.length<10){setPhase('ready');return;}
   try{
-  // Real duration: prefer wall-clock time (arm→dump) over firmware's magN/magHz
-  // because getEvent() blocks ~5ms/call, making actual rate ~160Hz not 500Hz.
-  // Wall-clock is ground truth; header rate is only a fallback.
-  const wallMs=armTimeMs>0?Date.now()-armTimeMs:0;
+  // Header duration is truth: firmware rates are now accurate (FIFO for IMU = sensor clock,
+  // mag polled on micros() timer within a few % of nominal). Wall-clock includes dump time
+  // which blows up with packet loss — unusable as a time reference.
+  // Received samples are a uniform subsample of the total; spread them evenly over hdr window.
   const hdrMs=savedHdr.magN/savedHdr.magHz*1000;
-  const realDurMs=wallMs>1000?wallMs:hdrMs; // use wall-clock if >1s, else header
-  const mDt=rxMag.length>1?realDurMs/(rxMag.length-1):2;
-  const iDt=rxImu.length>1?realDurMs/(rxImu.length-1):10;
+  const imuHdrMs=savedHdr.imuN&&savedHdr.imuHz?savedHdr.imuN/savedHdr.imuHz*1000:hdrMs;
+  const mDt=rxMag.length>1?hdrMs/(rxMag.length-1):1000/savedHdr.magHz;
+  const iDt=rxImu.length>1?imuHdrMs/(rxImu.length-1):1000/savedHdr.imuHz;
   for(let i=0;i<rxMag.length;i++)rxMag[i].t=i*mDt;
   for(let i=0;i<rxImu.length;i++)rxImu[i].t=i*iDt;
-  log('BLE rx: '+rxMag.length+'/'+savedHdr.magN+' mag ('+Math.round(rxMag.length/savedHdr.magN*100)+'%), wall='+
-    (wallMs/1000).toFixed(1)+'s hdr='+((hdrMs)/1000).toFixed(1)+'s used='+(realDurMs/1000).toFixed(1)+'s effSr='+Math.round(1000/mDt)+'Hz');
+  const magPct=Math.round(rxMag.length/savedHdr.magN*100);
+  const imuPct=Math.round(rxImu.length/savedHdr.imuN*100);
+  log('BLE rx: '+rxMag.length+'/'+savedHdr.magN+' mag ('+magPct+'%) '+rxImu.length+'/'+savedHdr.imuN+' imu ('+imuPct+'%), rec='+(hdrMs/1000).toFixed(1)+'s mEff='+Math.round(1000/mDt)+'Hz iEff='+Math.round(1000/iDt)+'Hz');
 
   let rpm=0;
   let peakG=0;for(const s of rxImu){const g=Math.sqrt(s.ax*s.ax+s.ay*s.ay+s.az*s.az)/9.81;if(g>peakG)peakG=g;}
@@ -519,22 +613,22 @@ function finishThrow(){
 function updateMetrics(t){
   const $=id=>document.getElementById(id);
   const e=t.extMetrics||{};
-  // Primary
-  $('mRPM').textContent=(t.crossRPM||'--')+' / '+(t.peakRPM||'--');
+  // Hero — prefer zero-crossing (robust) falling back to FFT. Show one number.
+  const rpmHero=t.crossRPM||t.peakRPM||null;
+  $('mRPM').textContent=rpmHero||'--';
   $('mSpd').textContent=t.estSpeed?t.estSpeed:'--';
+  $('mDist').textContent=t.distance?t.distance+'m':'--';
+  // Secondary
   $('mG').textContent=t.peakG?t.peakG+'g':'--';
+  $('mFlight').textContent=t.flightTime?t.flightTime+'s':'--';
+  $('mLaunch').textContent=e.launch?.velocity_deg!=null?e.launch.velocity_deg+'\u00B0':'--';
   $('mHyz').textContent=t.hyzerAngle!=null?t.hyzerAngle+'\u00B0':'--';
   $('mNose').textContent=t.noseAngle!=null?t.noseAngle+'\u00B0':'--';
-  $('mLaunch').textContent=e.launch?.velocity_deg!=null?e.launch.velocity_deg+'\u00B0':'--';
-  // Secondary
   $('mWobble').textContent=e.wobble?.angle_deg!=null?e.wobble.angle_deg+'\u00B0':'--';
   $('mWobTrend').textContent=e.wobble?.trend||'--';
   $('mWobTrend').style.color=e.wobble?.trend==='decaying'?'var(--gn)':e.wobble?.trend==='growing'?'var(--rd)':'var(--mt)';
   $('mADV').textContent=e.advanceRatio?.value!=null?e.advanceRatio.value:'--';
   $('mSpinQ').textContent=t.spinQuality!=null?t.spinQuality+'%':'--';
-  // Info
-  $('mDist').textContent=t.distance?t.distance+'m':'--';
-  $('mFlight').textContent=t.flightTime?t.flightTime+'s':'--';
   $('mDecay').textContent=e.spinDecay?e.spinDecay.decay_pct+'%':'--';
   $('mGyroRPM').textContent=e.gyroRPM?(e.gyroRPM.rpm+(e.gyroRPM.saturated?' SAT':'')):'--';
   $('mGyroRPM').style.color=e.gyroRPM?.saturated?'var(--rd)':'var(--mt)';
@@ -570,23 +664,43 @@ function analyzeThrow(t){
   // Derive timing from sample timestamps (already set by finishThrow using wall-clock)
   const iDt=imu.length>1?imu[imu.length-1].t/(imu.length-1):10;
   const mDt=mag.length>1?mag[mag.length-1].t/(mag.length-1):2;
-  // ── Find flight via gyro spin-up / spin-down ──
-  // Auto-detect spin axis by highest TOTAL SUM (sustained spin, not brief spikes)
-  let gxS=0,gyS=0,gzS=0;
-  for(const s of imu){gxS+=Math.abs(s.gx);gyS+=Math.abs(s.gy);gzS+=Math.abs(s.gz);}
-  const spinKey=gzS>=gyS&&gzS>=gxS?'gz':gyS>=gxS?'gy':'gx';
-  const spinVals=imu.map(s=>Math.abs(s[spinKey]));
-  let spinMax=0;for(const v of spinVals)if(v>spinMax)spinMax=v;
 
-  // Adaptive threshold: 20% of peak spin rate — captures full flight arc including
-  // deceleration phase (40% was too tight, gave 0.4s instead of 2-3s flight times)
-  const SPIN_THRESH=Math.max(spinMax*0.2, 2); // minimum 2 rad/s to avoid noise
-  let relIdx=-1,landIdx=-1;
-  for(let i=0;i<spinVals.length;i++){if(spinVals[i]>SPIN_THRESH){relIdx=i;break;}}
-  for(let i=spinVals.length-1;i>=0;i--){if(spinVals[i]>SPIN_THRESH){landIdx=i;break;}}
-
-  // Need at least 50ms of flight
-  if(relIdx<0||landIdx<0||landIdx-relIdx<Math.floor(50/iDt)){relIdx=0;landIdx=-1;}
+  // ── Find release = arg max |a|, then landing = next |a| > 4g post-release ──
+  // The old gyro spin-up/spin-down approach gave 11 s flight times (gyro saturates
+  // and stays high well past the throw). Accel-based detection is physically direct:
+  //   release = the big slam when the disc leaves your hand (peak |a| of the whole recording)
+  //   landing = the bounce/impact when the disc hits the ground (>4g, after release+50ms)
+  let spinKey='gz'; // for wobble calc below — default spin axis assumption
+  {
+    let gxS=0,gyS=0,gzS=0;
+    for(const s of imu){gxS+=Math.abs(s.gx);gyS+=Math.abs(s.gy);gzS+=Math.abs(s.gz);}
+    spinKey=gzS>=gyS&&gzS>=gxS?'gz':gyS>=gxS?'gy':'gx';
+  }
+  let relIdx=0,relMag=0;
+  for(let i=0;i<imu.length;i++){
+    const a=Math.sqrt(imu[i].ax*imu[i].ax+imu[i].ay*imu[i].ay+imu[i].az*imu[i].az);
+    if(a>relMag){relMag=a;relIdx=i;}
+  }
+  // Release must be an actual spike (>3g) — below that it's probably just handling
+  if(relMag<3*9.81){relIdx=0;}
+  const skipFrom=relIdx+Math.max(1,Math.floor(50/iDt));
+  let landIdx=-1,landMag=0;
+  for(let i=skipFrom;i<imu.length;i++){
+    const a=Math.sqrt(imu[i].ax*imu[i].ax+imu[i].ay*imu[i].ay+imu[i].az*imu[i].az);
+    if(a>4*9.81&&a>landMag){landMag=a;landIdx=i;}
+  }
+  // If no secondary spike found (disc rolled out of net or still in the air when we stopped),
+  // fall back to first post-release "mag flatline" = disc stationary
+  if(landIdx<0){
+    const flatWin=Math.round(200/mDt),flatThresh=2; // 2 µT std over 200 ms = stationary
+    const magRelIdx=Math.max(0,Math.round(relIdx*iDt/mDt));
+    for(let i=magRelIdx+flatWin;i<mag.length-flatWin;i+=5){
+      let sumX=0,sumX2=0;for(let j=i;j<i+flatWin;j++){sumX+=mag[j].x;sumX2+=mag[j].x*mag[j].x;}
+      const m=sumX/flatWin,sd=Math.sqrt(sumX2/flatWin-m*m);
+      if(sd<flatThresh){landIdx=Math.round(i*mDt/iDt);break;}
+    }
+  }
+  if(landIdx<=relIdx)landIdx=-1;
 
   t.releaseMs=+(relIdx*iDt).toFixed(0);
   t.landingMs=landIdx>=0?+(landIdx*iDt).toFixed(0):null;
@@ -609,62 +723,56 @@ function analyzeThrow(t){
     t.spinQuality=tE>0?Math.round(pE/tE*100):0;
   }
 
-  // ── Hyzer & nose angle (from PRE-THROW orientation, not in-flight) ──
-  // 1-2s before release: disc is in hand at intended angle, accel ≈ gravity
-  if(!cal)return;
-  const cm=Math.sqrt(cal.gx**2+cal.gy**2+cal.gz**2);if(cm<.1)return;
-  const N_={x:cal.gx/cm,y:cal.gy/cm,z:cal.gz/cm};
-  // Forward = throw direction from release peak accel, projected into disc plane
-  const pk=imu[relIdx];
-  const pdn=pk.ax*N_.x+pk.ay*N_.y+pk.az*N_.z;
-  let fx=pk.ax-pdn*N_.x,fy=pk.ay-pdn*N_.y,fz=pk.az-pdn*N_.z;
-  const fm2=Math.sqrt(fx*fx+fy*fy+fz*fz);if(fm2<.1)return;
-  fx/=fm2;fy/=fm2;fz/=fm2;
-  const lx=N_.y*fz-N_.z*fy,ly=N_.z*fx-N_.x*fz,lz=N_.x*fy-N_.y*fx;
-  // Gravity from 1-2s BEFORE release (disc in hand at intended angle)
-  const preStart=Math.max(0,relIdx-Math.floor(2000/iDt));
-  const preEnd=Math.max(0,relIdx-Math.floor(500/iDt));
-  if(preEnd<=preStart)return;
-  const preWin=imu.slice(preStart,preEnd);if(preWin.length<10)return;
-  let ux=0,uy=0,uz=0;for(const s of preWin){ux+=s.ax;uy+=s.ay;uz+=s.az;}
-  ux/=preWin.length;uy/=preWin.length;uz/=preWin.length;
-  const um=Math.sqrt(ux*ux+uy*uy+uz*uz);if(um<.1)return;
-  ux/=um;uy/=um;uz/=um;
-  const uN=ux*N_.x+uy*N_.y+uz*N_.z;
-  const uF=ux*fx+uy*fy+uz*fz;
-  const uL=ux*lx+uy*ly+uz*lz;
-  t.noseAngle=+(-Math.atan2(uF,uN)*180/Math.PI).toFixed(1);
-  t.hyzerAngle=+(Math.atan2(uL,uN)*180/Math.PI).toFixed(1);
+  // ── Hyzer & nose angle (from PRE-THROW orientation in sensor frame) ──
+  // 500 ms–2 s before release: disc is held at the intended angle. Mean accel is
+  // gravity projected onto the puck axes. Puck is taped with Z ≈ disc normal, so:
+  //   hyzer = tilt in the XZ plane (roll)  = atan2(gX, gZ)
+  //   nose  = tilt in the YZ plane (pitch) = atan2(gY, gZ)
+  // Sign convention assumes Z points up through the top of the disc; if gZ is
+  // negative (puck mounted face-down), we flip to get small angles rather than ~180°.
+  {
+    const preStart=Math.max(0,relIdx-Math.floor(2000/iDt));
+    const preEnd=Math.max(0,relIdx-Math.floor(500/iDt));
+    if(preEnd>preStart){
+      const preWin=imu.slice(preStart,preEnd);
+      if(preWin.length>=10){
+        let gX=0,gY=0,gZ=0;
+        for(const s of preWin){gX+=s.ax;gY+=s.ay;gZ+=s.az;}
+        gX/=preWin.length;gY/=preWin.length;gZ/=preWin.length;
+        // Flip if puck is mounted upside-down (gZ < 0 means disc top is facing ground)
+        if(gZ<0){gX=-gX;gY=-gY;gZ=-gZ;}
+        t.hyzerAngle=+(Math.atan2(gX,gZ)*180/Math.PI).toFixed(1);
+        t.noseAngle =+(Math.atan2(gY,gZ)*180/Math.PI).toFixed(1);
+      }
+    }
+  }
 
   // ═══════════════════════════════════════════════════════════
-  // EXTENDED METRICS — redundant methods for cross-validation
+  // EXTENDED METRICS
   // ═══════════════════════════════════════════════════════════
   const iDt2=imu.length>1?(imu[imu.length-1].t-imu[0].t)/(imu.length-1)/1000:0.01; // seconds
   const mDt2=mag.length>1?(mag[mag.length-1].t-mag[0].t)/(mag.length-1)/1000:0.002;
   const ext={};
 
-  // ── SPEED: accel integration (gravity-subtracted) ────────
-  // Use calibration gravity or pre-throw average as gravity reference
-  const gRef=cal?{x:cal.gx,y:cal.gy,z:cal.gz}:{x:ux*um,y:uy*um,z:uz*um};
-  let svx=0,svy=0,svz=0;
-  const throwStart=Math.max(0,relIdx-Math.floor(500/iDt)); // 500ms before release
-  for(let i=throwStart;i<=relIdx&&i<imu.length;i++){
-    svx+=(imu[i].ax-gRef.x)*iDt2;
-    svy+=(imu[i].ay-gRef.y)*iDt2;
-    svz+=(imu[i].az-gRef.z)*iDt2;
+  // ── Pre-throw gravity vector in sensor frame (used below) ──
+  // Unlike hyzer/nose above which flip gZ, here we keep the true sign so we can
+  // subtract it from accel during integration. Fallback to calibration or +Z up.
+  let gRef={x:0,y:0,z:9.81};
+  {
+    const preS=Math.max(0,relIdx-Math.floor(2000/iDt));
+    const preE=Math.max(0,relIdx-Math.floor(500/iDt));
+    if(preE>preS){
+      const pw=imu.slice(preS,preE);
+      if(pw.length>=10){
+        let gx=0,gy=0,gz=0;
+        for(const s of pw){gx+=s.ax;gy+=s.ay;gz+=s.az;}
+        gRef={x:gx/pw.length,y:gy/pw.length,z:gz/pw.length};
+      }
+    } else if(cal){gRef={x:cal.gx,y:cal.gy,z:cal.gz};}
   }
-  const speedAccelInt=Math.sqrt(svx*svx+svy*svy+svz*svz);
+  const gMag=Math.max(0.1,Math.sqrt(gRef.x*gRef.x+gRef.y*gRef.y+gRef.z*gRef.z));
 
-  // ── SPEED: magnitude integration (|a|-g, direction-agnostic) ──
-  let speedMagInt=0;
-  for(let i=throwStart;i<=relIdx&&i<imu.length;i++){
-    const am=Math.sqrt(imu[i].ax**2+imu[i].ay**2+imu[i].az**2);
-    speedMagInt+=Math.max(0,am-9.81)*iDt2;
-  }
-
-  // ── SPEED: Giljarhus ratio (spin/5.2) ────────────────────
-  // Uses whatever RPM we computed (will be set later in finishThrow, use pre-compute here)
-  // Quick zero-crossing estimate for this purpose
+  // ── Quick zero-crossing RPM for Giljarhus speed ──
   const relMagIdx=Math.min(Math.floor(t.releaseMs/mDt2/1000),mag.length-1);
   const landMagIdx=t.landingMs!=null?Math.min(Math.floor(t.landingMs/mDt2/1000),mag.length):mag.length;
   const flightMagSeg=mag.slice(Math.max(0,relMagIdx),landMagIdx);
@@ -681,33 +789,49 @@ function analyzeThrow(t){
     quickRPM=dur2>0?Math.round(zc2/2/dur2*60):0;
   }
   const omegaEst=quickRPM/60*2*Math.PI;
-  const speedGiljarhus=omegaEst/5.2;
+
+  // ── SPEED: spin-based (Giljarhus-style ratio) — PRIMARY METHOD ──
+  // Empirical: for a disc-golf driver, speed (m/s) ≈ RPM / 33. This is the
+  // inverse advance ratio ω·R/v ≈ 0.5 with R = 0.106 m. If real spin is 735 RPM,
+  // speed ≈ 22 m/s — matches amateur backhand. Will be recalibrated against
+  // one known-distance throw once we have a clean dataset.
+  const GILJ_RATIO=33;
+  const speedGiljarhus=quickRPM>0?quickRPM/GILJ_RATIO:0;
+
+  // ── SPEED: accel integration (kept for cross-check; drifts on a spinning disc) ──
+  let svx=0,svy=0,svz=0;
+  const throwStart=Math.max(0,relIdx-Math.floor(500/iDt));
+  for(let i=throwStart;i<=relIdx&&i<imu.length;i++){
+    svx+=(imu[i].ax-gRef.x)*iDt2;
+    svy+=(imu[i].ay-gRef.y)*iDt2;
+    svz+=(imu[i].az-gRef.z)*iDt2;
+  }
+  const speedAccelInt=Math.sqrt(svx*svx+svy*svy+svz*svz);
+
+  // ── SPEED: from GPS dist / flight time (if both available) — TRUTH ──
+  const speedDistTime=(t.distance&&t.flightTime&&t.flightTime>0.1)?(t.distance/t.flightTime):null;
 
   ext.speed={
-    accelInteg_ms:+speedAccelInt.toFixed(1),
-    accelInteg_mph:+(speedAccelInt*2.237).toFixed(1),
-    magInteg_ms:+speedMagInt.toFixed(1),
-    magInteg_mph:+(speedMagInt*2.237).toFixed(1),
     giljarhus_ms:+speedGiljarhus.toFixed(1),
     giljarhus_mph:+(speedGiljarhus*2.237).toFixed(1),
-    distTime_ms:t.estSpeed||null,
-    note:'AccelInteg=gravity-subtracted vector. MagInteg=|a|-g scalar. Giljarhus=spin/5.2. DistTime=GPS dist/flight time.'
+    accelInteg_ms:+speedAccelInt.toFixed(1),
+    accelInteg_mph:+(speedAccelInt*2.237).toFixed(1),
+    distTime_ms:speedDistTime?+speedDistTime.toFixed(1):null,
+    note:'Giljarhus (spin/33) is the primary method — accel integration drifts on a spinning rigid body. DistTime (GPS dist/flight time) is ground truth when available.'
   };
 
-  // Use accel integration as primary speed estimate (if reasonable)
-  if(speedAccelInt>2&&speedAccelInt<50)t.estSpeed=+speedAccelInt.toFixed(1);
+  // Primary displayed speed: dist/time (if we have it) > Giljarhus > accel integration
+  if(speedDistTime) t.estSpeed=+speedDistTime.toFixed(1);
+  else if(speedGiljarhus>1&&speedGiljarhus<50) t.estSpeed=+speedGiljarhus.toFixed(1);
+  else if(speedAccelInt>2&&speedAccelInt<50) t.estSpeed=+speedAccelInt.toFixed(1);
 
-  // ── LAUNCH ANGLE: velocity vector elevation ──────────────
-  // "Up" in sensor frame = -gravity_normalized
-  const upx=-gRef.x/cm,upy=-gRef.y/cm,upz=-gRef.z/cm;
+  // ── LAUNCH ANGLE: velocity vector elevation above horizontal ──
+  const upx=-gRef.x/gMag,upy=-gRef.y/gMag,upz=-gRef.z/gMag;
   const vVert=svx*upx+svy*upy+svz*upz;
-  const vHoriz=Math.sqrt(speedAccelInt**2-vVert**2);
+  const speedMag=Math.sqrt(svx*svx+svy*svy+svz*svz);
+  const vHoriz=Math.sqrt(Math.max(0,speedMag*speedMag-vVert*vVert));
   const launchVel=vHoriz>0.1?+(Math.atan2(vVert,vHoriz)*180/Math.PI).toFixed(1):null;
-
-  ext.launch={
-    velocity_deg:launchVel,
-    note:'Elevation of integrated velocity vector at release relative to gravity horizontal.'
-  };
+  ext.launch={velocity_deg:launchVel,note:'Elevation of integrated velocity vector at release. Unreliable when speed integration drifts.'};
 
   // ── WOBBLE: gyro X/Y analysis during flight ──────────────
   const wStart=Math.min(relIdx+2,imu.length-1);
@@ -774,39 +898,12 @@ function analyzeThrow(t){
   };
 
   // ── ADVANCE RATIO ────────────────────────────────────────
-  const DISC_R=0.106; // 21.2cm diameter driver
-  const bestSpeed=speedAccelInt>2?speedAccelInt:speedGiljarhus;
+  const DISC_R=0.106; // 21.2 cm diameter driver
+  const bestSpeed=t.estSpeed||speedGiljarhus||speedAccelInt;
   ext.advanceRatio={
     value:bestSpeed>0.5?+(omegaEst*DISC_R/bestSpeed).toFixed(3):null,
     target_BH:0.50,target_FH:0.30,
-    note:'TechDisc formula: spin*radius/speed. Target ~0.50 backhand, ~0.30 forehand.'
-  };
-
-  // ── HYZER METHOD B: gyro integration from rest ───────────
-  // Track disc normal from rest through throw via gyro cross-product integration
-  let dnx=-N_.x,dny=-N_.y,dnz=-N_.z;
-  for(let i=0;i<Math.min(relIdx+1,imu.length);i++){
-    const wx2=imu[i].gx,wy2=imu[i].gy,wz2=imu[i].gz;
-    const cx2=wy2*dnz-wz2*dny,cy2=wz2*dnx-wx2*dnz,cz2=wx2*dny-wy2*dnx;
-    dnx+=cx2*iDt2;dny+=cy2*iDt2;dnz+=cz2*iDt2;
-    const len=Math.sqrt(dnx*dnx+dny*dny+dnz*dnz);
-    dnx/=len;dny/=len;dnz/=len;
-  }
-  // Decompose disc normal at release vs gravity
-  const dotNG=dnx*ux+dny*uy+dnz*uz; // dot with pre-throw gravity direction
-  const totalTilt=Math.acos(Math.min(1,Math.max(-1,Math.abs(dotNG))))*180/Math.PI;
-  // Project into hyzer/nose using same forward direction as Method A
-  const dnF=dnx*fx+dny*fy+dnz*fz;
-  const dnL=dnx*lx+dny*ly+dnz*lz;
-  const dnU=dnx*ux+dny*uy+dnz*uz;
-  ext.hyzerB={
-    gyroInteg_deg:+(Math.atan2(dnL,dnU)*180/Math.PI).toFixed(1),
-    totalTilt_deg:+totalTilt.toFixed(1),
-    note:'Method B: integrate gyro from rest, decompose disc normal. Compare with Method A (pre-throw gravity window).'
-  };
-  ext.noseB={
-    gyroInteg_deg:+(-Math.atan2(dnF,dnU)*180/Math.PI).toFixed(1),
-    note:'Method B: disc pitch from gyro-integrated normal. Compare with Method A.'
+    note:'spin × radius / speed. Target ~0.50 backhand, ~0.30 forehand.'
   };
 
   t.extMetrics=ext;
@@ -847,11 +944,9 @@ function renderDetailedMetrics(t){
   h+='<div style="color:var(--bl);font-weight:700;margin-bottom:.3rem">Speed (3+1 methods)</div>';
   h+=row('Speed',e.speed);
   h+='<hr style="border-color:var(--bd);margin:.3rem 0">';
-  h+='<div style="color:var(--bl);font-weight:700;margin-bottom:.3rem">Angles (Method A vs B)</div>';
-  h+=row('Hyzer A (pre-throw gravity)',{deg:t.hyzerAngle!=null?t.hyzerAngle+'°':'--'});
-  h+=row('Hyzer B (gyro integration)',e.hyzerB);
-  h+=row('Nose A (pre-throw gravity)',{deg:t.noseAngle!=null?t.noseAngle+'°':'--'});
-  h+=row('Nose B (gyro integration)',e.noseB);
+  h+='<div style="color:var(--bl);font-weight:700;margin-bottom:.3rem">Angles</div>';
+  h+=row('Hyzer (pre-throw gravity, sensor frame)',{deg:t.hyzerAngle!=null?t.hyzerAngle+'°':'--'});
+  h+=row('Nose (pre-throw gravity, sensor frame)',{deg:t.noseAngle!=null?t.noseAngle+'°':'--'});
   if(e.launch)h+=row('Launch Angle',e.launch);
   h+='<hr style="border-color:var(--bd);margin:.3rem 0">';
   h+='<div style="color:var(--bl);font-weight:700;margin-bottom:.3rem">Spin Cross-Check</div>';
