@@ -372,9 +372,10 @@ function renderWx(){
   const arrows='\u2193\u2199\u2190\u2196\u2191\u2197\u2192\u2198';
   const a=arrows[Math.round((wx.dir||0)/45)%8];
   const card=['N','NE','E','SE','S','SW','W','NW'][Math.round((wx.dir||0)/45)%8];
+  const farStation=wx.stDist>5000; // >5 km: wind/gust is indicative, local conditions may differ
   document.getElementById('wxTemp').textContent=wx.temp+'\u00B0';
-  document.getElementById('wxWind').textContent=wx.wind+'m/s '+card+' '+a+(wx.gust>wx.wind?' ('+wx.gust+')':'');
-  document.getElementById('wxStation').textContent=wx.station+' \u2022 '+(wx.stDist/1000).toFixed(1)+'km';
+  document.getElementById('wxWind').textContent=(farStation?'\u2248 ':'')+wx.wind+'m/s '+card+' '+a+(wx.gust>wx.wind?' ('+wx.gust+')':'');
+  document.getElementById('wxStation').textContent=wx.station+' \u2022 '+(wx.stDist/1000).toFixed(1)+'km'+(farStation?' (far)':'');
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -698,29 +699,40 @@ function analyzeThrow(t){
   const iDt=imu.length>1?imu[imu.length-1].t/(imu.length-1):10;
   const mDt=mag.length>1?mag[mag.length-1].t/(mag.length-1):2;
 
-  // ── Find release = arg max |a|, then landing = next |a| > 4g post-release ──
-  // The old gyro spin-up/spin-down approach gave 11 s flight times (gyro saturates
-  // and stays high well past the throw). Accel-based detection is physically direct:
-  //   release = the big slam when the disc leaves your hand (peak |a| of the whole recording)
-  //   landing = the bounce/impact when the disc hits the ground (>4g, after release+50ms)
+  // ── Release = FIRST |ω| > 10 rad/s (gyro-onset); landing = next |a| > 4g ──
+  // Previously release = arg max |a|, which picked the LANDING spike when it was
+  // bigger than the release spike (common: ground impact > fingertip flick).
+  // That pushed the FFT spin window into the stationary walk-to-disc phase and
+  // gave 50-300 RPM noise-floor readings instead of real spin.
+  // Gyro onset is unambiguous because there's no spin before release and sustained
+  // spin after — the derivative has a clear step that survives even when the accel
+  // trace is confusing.
   let spinKey='gz'; // for wobble calc below — default spin axis assumption
   {
     let gxS=0,gyS=0,gzS=0;
     for(const s of imu){gxS+=Math.abs(s.gx);gyS+=Math.abs(s.gy);gzS+=Math.abs(s.gz);}
     spinKey=gzS>=gyS&&gzS>=gxS?'gz':gyS>=gxS?'gy':'gx';
   }
-  let relIdx=0,relMag=0;
-  for(let i=0;i<imu.length;i++){
-    const a=Math.sqrt(imu[i].ax*imu[i].ax+imu[i].ay*imu[i].ay+imu[i].az*imu[i].az);
-    if(a>relMag){relMag=a;relIdx=i;}
+  let relIdx=-1;
+  for(let i=10;i<imu.length;i++){ // skip first 10 samples in case residual spike is present
+    const g=Math.sqrt(imu[i].gx*imu[i].gx+imu[i].gy*imu[i].gy+imu[i].gz*imu[i].gz);
+    if(g>10){relIdx=i;break;}
   }
-  // Release must be an actual spike (>3g) — below that it's probably just handling
-  if(relMag<3*9.81){relIdx=0;}
-  const skipFrom=relIdx+Math.max(1,Math.floor(50/iDt));
-  let landIdx=-1,landMag=0;
+  // Fallback: if no gyro onset (static/quiet recording), use old arg-max-|a| > 3g.
+  if(relIdx<0){
+    let relMag=0;
+    for(let i=0;i<imu.length;i++){
+      const a=Math.sqrt(imu[i].ax*imu[i].ax+imu[i].ay*imu[i].ay+imu[i].az*imu[i].az);
+      if(a>relMag){relMag=a;relIdx=i;}
+    }
+    if(relMag<3*9.81){relIdx=0;}
+  }
+  // Landing = FIRST |a| > 4g after release + 300 ms (past arm-swing transients).
+  const skipFrom=relIdx+Math.max(1,Math.floor(300/iDt));
+  let landIdx=-1;
   for(let i=skipFrom;i<imu.length;i++){
     const a=Math.sqrt(imu[i].ax*imu[i].ax+imu[i].ay*imu[i].ay+imu[i].az*imu[i].az);
-    if(a>4*9.81&&a>landMag){landMag=a;landIdx=i;}
+    if(a>4*9.81){landIdx=i;break;}
   }
   // If no secondary spike found (disc rolled out of net or still in the air when we stopped),
   // fall back to first post-release "mag flatline" = disc stationary
@@ -920,15 +932,34 @@ function analyzeThrow(t){
     };
   }
 
-  // ── GYRO Z RPM (cross-check, saturates at ~333 RPM) ──────
-  const gyroSpinVals=wWin.map(s=>Math.abs(s[spinAx]));
-  const avgGyroSpin=gyroSpinVals.length>0?gyroSpinVals.reduce((a,b)=>a+b,0)/gyroSpinVals.length:0;
+  // ── GYRO RPM (magnitude across all axes) ──────
+  // Using vector magnitude instead of single axis: when the dominant axis saturates
+  // at ±34.9 rad/s, the secondary axes still contribute, letting the magnitude
+  // reach up to ~60 rad/s (577 RPM) before fully saturating.
+  let gPeakMag2=0,gSumMag=0,gN=0;
+  for(const s of wWin){
+    const g2=s.gx*s.gx+s.gy*s.gy+s.gz*s.gz;
+    if(g2>gPeakMag2)gPeakMag2=g2;
+    gSumMag+=Math.sqrt(g2);gN++;
+  }
+  const gPeakMag=Math.sqrt(gPeakMag2);
+  const gMeanMag=gN>0?gSumMag/gN:0;
   ext.gyroRPM={
-    rpm:Math.round(avgGyroSpin/(2*Math.PI)*60),
-    saturated:avgGyroSpin>33,
-    raw_rads:+avgGyroSpin.toFixed(1),
-    note:'Direct gyro spin-axis reading. Saturates at ~333 RPM (34.9 rad/s for +/-2000dps).'
+    rpm:Math.round(gMeanMag*9.549),      // mean = stable estimate over flight window
+    peak_rpm:Math.round(gPeakMag*9.549), // peak = short-duration maximum
+    saturated:gPeakMag>=34,              // individual-axis saturation boundary
+    fully_saturated:gPeakMag>=58,        // all-axes saturation (~577 RPM)
+    raw_rads_mean:+gMeanMag.toFixed(1),
+    raw_rads_peak:+gPeakMag.toFixed(1),
+    note:'Vector magnitude. Mean is primary; peak is upper bound. Single-axis saturates at 34.9 rad/s (333 RPM), magnitude saturates ~58 rad/s (577 RPM).'
   };
+
+  // ── Primary displayed RPM: gyro if not saturated, else mag-FFT as fallback ──
+  // Gyro is direct and unambiguous below saturation; when saturated the mag FFT
+  // is the only reliable way to recover the real spin frequency.
+  if(!ext.gyroRPM.fully_saturated && ext.gyroRPM.rpm>50){
+    t.crossRPM=ext.gyroRPM.rpm; // make gyro the primary hero source
+  }
 
   // ── ADVANCE RATIO ────────────────────────────────────────
   const DISC_R=0.106; // 21.2 cm diameter driver
