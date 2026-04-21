@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Throw Explorer — VicDisc</title>
+<style>
+:root{--bg:#0a0e14;--sf:#12181f;--cd:#1a2230;--bd:#2a3444;--tx:#e2e8f0;--mt:#64748b;
+  --gn:#22c55e;--bl:#3b82f6;--or:#f59e0b;--rd:#ef4444;--pr:#a855f7;--cy:#06b6d4;
+  --r:10px}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:-apple-system,system-ui,'Segoe UI',sans-serif;background:var(--bg);color:var(--tx);
+  padding:env(safe-area-inset-top,.5rem) .8rem 1rem;min-height:100dvh;font-size:14px;line-height:1.4}
+
+a{color:var(--bl);text-decoration:none}
+a:hover{text-decoration:underline}
+
+.hdr{display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;margin-bottom:.6rem;
+  gap:.8rem;flex-wrap:wrap}
+.hdr h1{font-size:1.3rem;font-weight:800;background:linear-gradient(135deg,var(--bl),var(--pr));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hdr-sub{font-size:.7rem;color:var(--mt);margin-top:.15rem}
+.back{font-size:.8rem;padding:.35rem .7rem;background:var(--cd);border:1px solid var(--bd);
+  border-radius:8px;color:var(--tx);font-weight:600}
+
+/* Stats strip */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:.4rem;margin-bottom:.7rem}
+.stat{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:.55rem .7rem}
+.stat .v{font-size:1.15rem;font-weight:800;font-family:'SF Mono',ui-monospace,monospace;line-height:1.2}
+.stat .u{font-size:.65rem;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-top:.15rem}
+.stat .sub{font-size:.7rem;color:var(--mt);margin-top:.1rem}
+.stat.pr .v{color:var(--pr)} .stat.or .v{color:var(--or)} .stat.gn .v{color:var(--gn)}
+.stat.cy .v{color:var(--cy)} .stat.bl .v{color:var(--bl)}
+
+/* Filter bar */
+.filters{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.6rem;align-items:center}
+.filters input,.filters select{background:var(--sf);border:1px solid var(--bd);color:var(--tx);
+  padding:.35rem .55rem;border-radius:7px;font-size:.8rem;font-family:inherit}
+.filters input{min-width:180px;flex:1;max-width:260px}
+.filters .reset{background:var(--cd);border:1px solid var(--bd);color:var(--mt);padding:.35rem .7rem;
+  border-radius:7px;font-size:.75rem;font-weight:600;cursor:pointer}
+.filters .reset:hover{color:var(--tx)}
+.filters .count{margin-left:auto;font-size:.75rem;color:var(--mt)}
+
+/* Table */
+.tbl-wrap{overflow-x:auto;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);
+  margin-bottom:.6rem}
+table{width:100%;border-collapse:collapse;font-size:.78rem}
+thead th{position:sticky;top:0;background:var(--cd);color:var(--mt);text-align:left;
+  padding:.5rem .55rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;font-size:.65rem;
+  cursor:pointer;user-select:none;white-space:nowrap;border-bottom:1px solid var(--bd)}
+thead th:hover{color:var(--tx)}
+thead th.sorted{color:var(--bl)}
+thead th .arrow{opacity:.8;margin-left:.2rem;font-size:.7rem}
+tbody td{padding:.45rem .55rem;border-bottom:1px solid var(--bd);white-space:nowrap;
+  font-family:'SF Mono',ui-monospace,monospace}
+tbody td.text{font-family:inherit}
+tbody tr{cursor:pointer;transition:background .1s}
+tbody tr:hover{background:var(--cd)}
+tbody tr:last-child td{border-bottom:none}
+tbody td.notes{max-width:220px;overflow:hidden;text-overflow:ellipsis}
+.pill{display:inline-block;padding:.1rem .4rem;background:var(--cd);border:1px solid var(--bd);
+  border-radius:5px;font-size:.68rem;color:var(--mt);font-family:inherit}
+.pill.bh{color:var(--bl);border-color:#1e3a5f} .pill.fh{color:var(--or);border-color:#5a3a0a}
+.pill.roller{color:var(--pr);border-color:#3a1e5a} .pill.thumber{color:var(--cy);border-color:#0a4a5a}
+.muted{color:var(--mt)}
+.big-n{color:var(--or);font-weight:700}
+
+/* Detail dialog */
+dialog.detail{border:none;background:var(--sf);color:var(--tx);border-radius:14px;padding:0;
+  max-width:880px;width:calc(100% - 1rem);max-height:calc(100dvh - 1rem);
+  box-shadow:0 20px 60px rgba(0,0,0,.6)}
+dialog.detail::backdrop{background:rgba(0,0,0,.75);backdrop-filter:blur(3px)}
+.d-head{display:flex;justify-content:space-between;align-items:flex-start;padding:.8rem 1rem;
+  border-bottom:1px solid var(--bd);position:sticky;top:0;background:var(--sf);z-index:1}
+.d-head h2{font-size:1rem;font-weight:800}
+.d-head .sub{font-size:.75rem;color:var(--mt);margin-top:.15rem;font-family:ui-monospace,monospace}
+.d-close{background:var(--cd);border:1px solid var(--bd);color:var(--tx);
+  width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:1.1rem;line-height:1;font-weight:700}
+.d-body{padding:.8rem 1rem 1rem;overflow-y:auto;max-height:calc(100dvh - 5rem)}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.4rem;margin-bottom:.7rem}
+.gi{background:var(--cd);border:1px solid var(--bd);border-radius:8px;padding:.4rem .55rem}
+.gi .l{font-size:.6rem;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.gi .v{font-size:.85rem;font-weight:700;font-family:'SF Mono',ui-monospace,monospace;margin-top:.15rem;
+  word-break:break-all}
+.gi .v.text{font-family:inherit;font-weight:600}
+.section-h{font-size:.7rem;font-weight:700;color:var(--bl);text-transform:uppercase;letter-spacing:.6px;
+  margin:.8rem 0 .35rem;padding-bottom:.2rem;border-bottom:1px solid var(--bd)}
+
+.plots .canvas-wrap{margin-top:.5rem}
+.plots h4{font-size:.72rem;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;
+  font-weight:700;margin-bottom:.2rem;display:flex;justify-content:space-between;align-items:center}
+.plots h4 .legend{font-family:ui-monospace,monospace;font-size:.65rem;font-weight:600;
+  color:var(--mt);display:flex;gap:.5rem}
+.plots h4 .legend span{display:inline-flex;align-items:center;gap:.2rem}
+.plots h4 .legend .sw{width:10px;height:2px;display:inline-block}
+.plots canvas{background:var(--bg);border:1px solid var(--bd);border-radius:8px;width:100%;
+  display:block;height:140px}
+
+.actions{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.5rem}
+.actions button,.actions a{background:var(--cd);border:1px solid var(--bd);color:var(--tx);
+  padding:.4rem .75rem;border-radius:7px;font-size:.75rem;font-weight:600;cursor:pointer;
+  text-decoration:none;display:inline-block;font-family:inherit}
+.actions button:hover,.actions a:hover{background:var(--bd);text-decoration:none}
+.actions .primary{background:var(--bl);border-color:var(--bl);color:#fff}
+.actions .primary:hover{background:#2563eb}
+
+.empty,.loading,.error{padding:2rem 1rem;text-align:center;color:var(--mt);font-size:.9rem}
+.error{color:var(--rd)}
+.spin{display:inline-block;width:16px;height:16px;border:2px solid var(--bd);border-top-color:var(--bl);
+  border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:.4rem}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@media(max-width:700px){
+  body{padding:.4rem;font-size:13px}
+  .hdr h1{font-size:1.1rem}
+  thead th,tbody td{padding:.4rem .4rem;font-size:.72rem}
+  .col-hide-sm{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div>
+    <h1>Throw Explorer</h1>
+    <div class="hdr-sub">Every throw ever recorded by the VicDisc puck</div>
+  </div>
+  <a class="back" href="../">&larr; Collector app</a>
+</div>
+
+<div class="stats" id="stats">
+  <div class="stat"><div class="v"><span class="spin"></span></div><div class="u">Loading</div></div>
+</div>
+
+<div class="filters">
+  <input type="search" id="fSearch" placeholder="Search notes, collector, disc…">
+  <select id="fCollector"><option value="">All collectors</option></select>
+  <select id="fDisc"><option value="">All discs</option></select>
+  <select id="fType">
+    <option value="">All types</option>
+    <option value="BH">BH</option><option value="FH">FH</option>
+    <option value="Roller">Roller</option><option value="Thumber">Thumber</option>
+    <option value="__unlabeled">Unlabeled</option>
+  </select>
+  <button class="reset" onclick="resetFilters()">Reset</button>
+  <span class="count" id="count">—</span>
+</div>
+
+<div class="tbl-wrap" id="tblWrap">
+  <div class="loading"><span class="spin"></span>Loading throws…</div>
+</div>
+
+<dialog class="detail" id="detail">
+  <div class="d-head">
+    <div>
+      <h2 id="dTitle">Throw</h2>
+      <div class="sub" id="dSub"></div>
+    </div>
+    <button class="d-close" onclick="closeDetail()" aria-label="Close">&times;</button>
+  </div>
+  <div class="d-body" id="dBody"></div>
+</dialog>
+
+<script>
+const SUPA_URL='https://fjptyllozsmlhxpahocd.supabase.co';
+const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqcHR5bGxvenNtbGh4cGFob2NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzA1NjMsImV4cCI6MjA5MTc0NjU2M30.Zx3kn4TBpGFjDfSeNgUHq86FAaNtNNFV-1F1g9b0Ynk';
+
+// Columns excluded from the initial list query (fetched on-demand per throw)
+const SUMMARY_COLS=[
+  'id','created_at','collector','disc','distance_m','bearing_deg',
+  'tee_lat','tee_lon','tee_acc','land_lat','land_lon','land_acc',
+  'temp_c','wind_ms','wind_dir_deg','wind_gust_ms','wx_station','wx_dist_m',
+  'peak_rpm','peak_g','flight_time_s','est_speed_ms','spin_quality',
+  'hyzer_deg','nose_deg','throw_type','effort','notes',
+  'mag_rate_hz','imu_rate_hz','duration_s',
+  'speed_accel_ms','speed_giljarhus_ms','wobble_deg','wobble_trend',
+  'launch_angle_deg','advance_ratio','gyro_rpm'
+].join(',');
+
+let allThrows=[];
+let sortKey='created_at',sortDir='desc';
+const filters={search:'',collector:'',disc:'',type:''};
+
+// ═══════════ FETCH ═══════════
+async function fetchAll(){
+  const url=`${SUPA_URL}/rest/v1/throws?select=${SUMMARY_COLS}&order=created_at.desc&limit=10000`;
+  const r=await fetch(url,{headers:{apikey:SUPA_KEY,Authorization:'Bearer '+SUPA_KEY}});
+  if(!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text()}`);
+  return r.json();
+}
+
+async function fetchRaw(id){
+  const url=`${SUPA_URL}/rest/v1/throws?id=eq.${encodeURIComponent(id)}&select=raw_mag,raw_imu`;
+  const r=await fetch(url,{headers:{apikey:SUPA_KEY,Authorization:'Bearer '+SUPA_KEY}});
+  if(!r.ok) throw new Error(`HTTP ${r.status}`);
+  const rows=await r.json();
+  return rows[0]||{};
+}
+
+// ═══════════ INIT ═══════════
+(async()=>{
+  try{
+    allThrows=await fetchAll();
+    populateFilters();
+    renderStats();
+    render();
+    wireEvents();
+  }catch(e){
+    document.getElementById('tblWrap').innerHTML=
+      `<div class="error">Failed to load throws: ${escapeHtml(e.message)}</div>`;
+    document.getElementById('stats').innerHTML='';
+  }
+})();
+
+function wireEvents(){
+  document.getElementById('fSearch').addEventListener('input',e=>{filters.search=e.target.value.toLowerCase();render();});
+  document.getElementById('fCollector').addEventListener('change',e=>{filters.collector=e.target.value;render();});
+  document.getElementById('fDisc').addEventListener('change',e=>{filters.disc=e.target.value;render();});
+  document.getElementById('fType').addEventListener('change',e=>{filters.type=e.target.value;render();});
+  document.getElementById('detail').addEventListener('close',()=>{history.replaceState(null,'',location.pathname);});
+  // Open detail if URL has ?throw=<id>
+  const h=new URLSearchParams(location.search).get('throw');
+  if(h) setTimeout(()=>openDetail(h),100);
+}
+
+function resetFilters(){
+  filters.search='';filters.collector='';filters.disc='';filters.type='';
+  document.getElementById('fSearch').value='';
+  document.getElementById('fCollector').value='';
+  document.getElementById('fDisc').value='';
+  document.getElementById('fType').value='';
+  render();
+}
+
+function populateFilters(){
+  const cols=[...new Set(allThrows.map(t=>t.collector).filter(Boolean))].sort();
+  const discs=[...new Set(allThrows.map(t=>t.disc).filter(Boolean))].sort();
+  document.getElementById('fCollector').innerHTML='<option value="">All collectors</option>'+
+    cols.map(c=>`<option>${escapeHtml(c)}</option>`).join('');
+  document.getElementById('fDisc').innerHTML='<option value="">All discs</option>'+
+    discs.map(d=>`<option>${escapeHtml(d)}</option>`).join('');
+}
+
+// ═══════════ STATS ═══════════
+function renderStats(){
+  const n=allThrows.length;
+  const collectors=new Set(allThrows.map(t=>t.collector).filter(Boolean)).size;
+  const discs=new Set(allThrows.map(t=>t.disc).filter(Boolean)).size;
+  const dists=allThrows.map(t=>+t.distance_m||0);
+  const rpms=allThrows.map(t=>+t.peak_rpm||0);
+  const gs=allThrows.map(t=>+t.peak_g||0);
+  const speeds=allThrows.map(t=>+t.est_speed_ms||0);
+  const maxDist=Math.max(0,...dists);
+  const maxRpm=Math.max(0,...rpms);
+  const maxG=Math.max(0,...gs);
+  const maxSpeed=Math.max(0,...speeds);
+  const farThrow=allThrows.find(t=>+t.distance_m===maxDist&&maxDist>0);
+  const spinThrow=allThrows.find(t=>+t.peak_rpm===maxRpm&&maxRpm>0);
+  const fastThrow=allThrows.find(t=>+t.est_speed_ms===maxSpeed&&maxSpeed>0);
+  const dates=allThrows.map(t=>t.created_at).filter(Boolean).sort();
+  const first=dates[0]?.slice(0,10),last=dates[dates.length-1]?.slice(0,10);
+  document.getElementById('stats').innerHTML=`
+    <div class="stat"><div class="v">${n}</div><div class="u">Throws</div>
+      <div class="sub">${first||'—'} to ${last||'—'}</div></div>
+    <div class="stat bl"><div class="v">${collectors}</div><div class="u">Collectors</div></div>
+    <div class="stat"><div class="v">${discs}</div><div class="u">Discs</div></div>
+    <div class="stat or"><div class="v">${maxDist.toFixed(1)}<span style="font-size:.7rem;color:var(--mt)">m</span></div>
+      <div class="u">Farthest</div><div class="sub">${escapeHtml(farThrow?.collector||'')}</div></div>
+    <div class="stat pr"><div class="v">${maxRpm}<span style="font-size:.7rem;color:var(--mt)">rpm</span></div>
+      <div class="u">Top Spin</div><div class="sub">${escapeHtml(spinThrow?.collector||'')}</div></div>
+    <div class="stat cy"><div class="v">${maxSpeed?maxSpeed.toFixed(1):'—'}<span style="font-size:.7rem;color:var(--mt)">m/s</span></div>
+      <div class="u">Top Speed</div><div class="sub">${escapeHtml(fastThrow?.collector||'')}</div></div>
+    <div class="stat gn"><div class="v">${maxG?maxG.toFixed(1):'—'}<span style="font-size:.7rem;color:var(--mt)">g</span></div>
+      <div class="u">Peak G</div></div>
+  `;
+}
+
+// ═══════════ RENDER TABLE ═══════════
+const COLS=[
+  {k:'created_at',l:'Date',fmt:v=>v?v.slice(5,16).replace('T',' '):'—'},
+  {k:'collector',l:'Collector',cls:'text',fmt:v=>escapeHtml(v||'—')},
+  {k:'disc',l:'Disc',cls:'text hide-sm',fmt:v=>escapeHtml(v||'—'),colHide:'col-hide-sm'},
+  {k:'throw_type',l:'Type',fmt:v=>v?`<span class="pill ${v.toLowerCase()}">${escapeHtml(v)}</span>`:'<span class="muted">—</span>'},
+  {k:'effort',l:'Effort',fmt:v=>v||'<span class="muted">—</span>',colHide:'col-hide-sm'},
+  {k:'distance_m',l:'Dist (m)',fmt:v=>v!=null?`<span class="big-n">${(+v).toFixed(1)}</span>`:'<span class="muted">—</span>',num:true},
+  {k:'peak_rpm',l:'RPM',fmt:v=>v!=null?v:'<span class="muted">—</span>',num:true},
+  {k:'peak_g',l:'Peak G',fmt:v=>v!=null?v:'<span class="muted">—</span>',num:true,colHide:'col-hide-sm'},
+  {k:'flight_time_s',l:'Flight (s)',fmt:v=>v!=null?(+v).toFixed(2):'<span class="muted">—</span>',num:true,colHide:'col-hide-sm'},
+  {k:'est_speed_ms',l:'Speed (m/s)',fmt:v=>v!=null?(+v).toFixed(1):'<span class="muted">—</span>',num:true,colHide:'col-hide-sm'},
+  {k:'hyzer_deg',l:'Hyzer',fmt:v=>v!=null?(+v).toFixed(0)+'°':'<span class="muted">—</span>',num:true,colHide:'col-hide-sm'},
+  {k:'wind_ms',l:'Wind',fmt:v=>v!=null?(+v).toFixed(1):'<span class="muted">—</span>',num:true,colHide:'col-hide-sm'},
+  {k:'notes',l:'Notes',cls:'text notes',fmt:v=>escapeHtml(v||'')||'<span class="muted">—</span>'},
+];
+
+function visible(){
+  const s=filters.search;
+  return allThrows.filter(t=>{
+    if(filters.collector&&t.collector!==filters.collector)return false;
+    if(filters.disc&&t.disc!==filters.disc)return false;
+    if(filters.type==='__unlabeled'){if(t.throw_type)return false;}
+    else if(filters.type&&t.throw_type!==filters.type)return false;
+    if(s){
+      const hay=[t.collector,t.disc,t.throw_type,t.notes,t.effort,t.wx_station].filter(Boolean).join(' ').toLowerCase();
+      if(!hay.includes(s))return false;
+    }
+    return true;
+  }).sort((a,b)=>{
+    const av=a[sortKey],bv=b[sortKey];
+    if(av==null&&bv==null)return 0;
+    if(av==null)return 1; if(bv==null)return -1;
+    const c=typeof av==='number'&&typeof bv==='number'?av-bv:String(av).localeCompare(String(bv));
+    return sortDir==='desc'?-c:c;
+  });
+}
+
+function render(){
+  const rows=visible();
+  document.getElementById('count').textContent=
+    rows.length===allThrows.length?`${rows.length} throws`:`${rows.length} of ${allThrows.length} throws`;
+  if(!rows.length){
+    document.getElementById('tblWrap').innerHTML='<div class="empty">No throws match your filters.</div>';
+    return;
+  }
+  const thead=COLS.map(c=>{
+    const sorted=c.k===sortKey;
+    const arrow=sorted?(sortDir==='desc'?'▼':'▲'):'';
+    return `<th class="${c.colHide||''} ${sorted?'sorted':''}" data-k="${c.k}">${c.l}<span class="arrow">${arrow}</span></th>`;
+  }).join('');
+  const tbody=rows.map(t=>{
+    const tds=COLS.map(c=>{
+      const v=t[c.k];
+      return `<td class="${c.cls||''} ${c.colHide||''}">${c.fmt(v)}</td>`;
+    }).join('');
+    return `<tr data-id="${t.id}">${tds}</tr>`;
+  }).join('');
+  document.getElementById('tblWrap').innerHTML=`<table>
+    <thead><tr>${thead}</tr></thead>
+    <tbody>${tbody}</tbody>
+  </table>`;
+  // Wire sorting + row clicks
+  document.querySelectorAll('thead th').forEach(th=>{
+    th.addEventListener('click',()=>{
+      const k=th.dataset.k;
+      if(sortKey===k){sortDir=sortDir==='desc'?'asc':'desc';}
+      else{sortKey=k;sortDir=COLS.find(c=>c.k===k).num?'desc':'asc';}
+      render();
+    });
+  });
+  document.querySelectorAll('tbody tr').forEach(tr=>{
+    tr.addEventListener('click',()=>openDetail(tr.dataset.id));
+  });
+}
+
+// ═══════════ DETAIL ═══════════
+async function openDetail(id){
+  const t=allThrows.find(x=>x.id===id);
+  if(!t){document.getElementById('dBody').innerHTML='<div class="error">Throw not found.</div>';
+    document.getElementById('detail').showModal();return;}
+  const dlg=document.getElementById('detail');
+  document.getElementById('dTitle').textContent=`${t.collector||'Anon'} · ${t.disc||'Unknown disc'}`;
+  document.getElementById('dSub').textContent=`${t.created_at?.replace('T',' ').slice(0,19)||'—'}  ·  id ${t.id}`;
+  history.replaceState(null,'','?throw='+encodeURIComponent(id));
+  const body=document.getElementById('dBody');
+  body.innerHTML=renderDetailHtml(t,null,true);
+  dlg.showModal();
+  // Lazy fetch raw arrays
+  try{
+    const raw=await fetchRaw(id);
+    body.innerHTML=renderDetailHtml(t,raw,false);
+    if(raw.raw_mag)drawSeries('plotMag',raw.raw_mag,t.mag_rate_hz,['Mx','My','Mz'],'µT');
+    if(raw.raw_imu)drawSeries('plotAcc',raw.raw_imu,t.imu_rate_hz,['Ax','Ay','Az'],'m/s²',[0,1,2]);
+    if(raw.raw_imu)drawSeries('plotGyr',raw.raw_imu,t.imu_rate_hz,['Gx','Gy','Gz'],'rad/s',[3,4,5]);
+    wireDetailActions(t,raw);
+  }catch(e){
+    body.innerHTML=renderDetailHtml(t,null,false)+
+      `<div class="error" style="padding:.5rem 0">Raw sensor fetch failed: ${escapeHtml(e.message)}</div>`;
+    wireDetailActions(t,null);
+  }
+}
+function closeDetail(){document.getElementById('detail').close();}
+
+function renderDetailHtml(t,raw,loading){
+  const gi=(l,v,cls='')=>`<div class="gi"><div class="l">${l}</div><div class="v ${cls}">${v}</div></div>`;
+  const fmt=(v,unit='',dp=1)=>v==null?'<span class="muted">—</span>':(typeof v==='number'?(+v).toFixed(dp):v)+unit;
+  const hasLand=t.land_lat!=null&&t.land_lon!=null;
+  const hasTee=t.tee_lat!=null&&t.tee_lon!=null;
+  const osmLink=hasLand?`https://www.openstreetmap.org/?mlat=${t.land_lat}&mlon=${t.land_lon}&zoom=19`:null;
+  const teeLink=hasTee?`https://www.openstreetmap.org/?mlat=${t.tee_lat}&mlon=${t.tee_lon}&zoom=19`:null;
+  return `
+    <div class="section-h">Labels &amp; Context</div>
+    <div class="grid">
+      ${gi('Collector',escapeHtml(t.collector||'—'),'text')}
+      ${gi('Disc',escapeHtml(t.disc||'—'),'text')}
+      ${gi('Type',t.throw_type?`<span class="pill ${t.throw_type.toLowerCase()}">${escapeHtml(t.throw_type)}</span>`:'<span class="muted">—</span>','text')}
+      ${gi('Effort',escapeHtml(t.effort||'—'),'text')}
+      ${gi('Notes',escapeHtml(t.notes||'—'),'text')}
+      ${gi('Recorded',t.created_at?t.created_at.slice(0,19).replace('T',' '):'—')}
+    </div>
+
+    <div class="section-h">Flight Metrics</div>
+    <div class="grid">
+      ${gi('Distance',fmt(t.distance_m,' m'))}
+      ${gi('Bearing',fmt(t.bearing_deg,'°',0))}
+      ${gi('Flight time',fmt(t.flight_time_s,' s',2))}
+      ${gi('Duration',fmt(t.duration_s,' s',1))}
+      ${gi('Peak RPM',t.peak_rpm??'<span class="muted">—</span>')}
+      ${gi('Gyro RPM',t.gyro_rpm??'<span class="muted">—</span>')}
+      ${gi('Peak G',t.peak_g??'<span class="muted">—</span>')}
+      ${gi('Est speed',fmt(t.est_speed_ms,' m/s'))}
+      ${gi('Speed (accel)',fmt(t.speed_accel_ms,' m/s'))}
+      ${gi('Speed (Giljarhus)',fmt(t.speed_giljarhus_ms,' m/s'))}
+      ${gi('Hyzer',fmt(t.hyzer_deg,'°',0))}
+      ${gi('Nose',fmt(t.nose_deg,'°',0))}
+      ${gi('Launch angle',fmt(t.launch_angle_deg,'°',0))}
+      ${gi('Wobble',fmt(t.wobble_deg,'°'))}
+      ${gi('Wobble trend',escapeHtml(t.wobble_trend||'—'),'text')}
+      ${gi('Spin quality',t.spin_quality!=null?t.spin_quality+'%':'<span class="muted">—</span>')}
+      ${gi('Advance ratio',fmt(t.advance_ratio,'',2))}
+    </div>
+
+    <div class="section-h">Location &amp; Weather</div>
+    <div class="grid">
+      ${gi('Tee',hasTee?`${(+t.tee_lat).toFixed(5)}, ${(+t.tee_lon).toFixed(5)}`:'<span class="muted">—</span>')}
+      ${gi('Landing',hasLand?`${(+t.land_lat).toFixed(5)}, ${(+t.land_lon).toFixed(5)}`:'<span class="muted">—</span>')}
+      ${gi('Tee GPS acc',fmt(t.tee_acc,' m'))}
+      ${gi('Land GPS acc',fmt(t.land_acc,' m'))}
+      ${gi('Temperature',fmt(t.temp_c,' °C'))}
+      ${gi('Wind',fmt(t.wind_ms,' m/s'))}
+      ${gi('Wind gust',fmt(t.wind_gust_ms,' m/s'))}
+      ${gi('Wind dir',fmt(t.wind_dir_deg,'°',0))}
+      ${gi('Wx station',escapeHtml(t.wx_station||'—'),'text')}
+      ${gi('Wx dist',fmt(t.wx_dist_m,' m',0))}
+    </div>
+
+    <div class="section-h">Raw Sensor Data</div>
+    <div class="grid">
+      ${gi('Mag rate',fmt(t.mag_rate_hz,' Hz',0))}
+      ${gi('IMU rate',fmt(t.imu_rate_hz,' Hz',0))}
+      ${gi('Mag samples',raw?.raw_mag?raw.raw_mag.length:(loading?'<span class="spin"></span>':'<span class="muted">—</span>'))}
+      ${gi('IMU samples',raw?.raw_imu?raw.raw_imu.length:(loading?'<span class="spin"></span>':'<span class="muted">—</span>'))}
+    </div>
+    <div class="plots">
+      <div class="canvas-wrap"><h4>Magnetometer
+        <span class="legend"><span><span class="sw" style="background:#ef4444"></span>Mx</span>
+        <span><span class="sw" style="background:#22c55e"></span>My</span>
+        <span><span class="sw" style="background:#3b82f6"></span>Mz</span></span></h4>
+        <canvas id="plotMag"></canvas></div>
+      <div class="canvas-wrap"><h4>Accelerometer
+        <span class="legend"><span><span class="sw" style="background:#ef4444"></span>Ax</span>
+        <span><span class="sw" style="background:#22c55e"></span>Ay</span>
+        <span><span class="sw" style="background:#3b82f6"></span>Az</span></span></h4>
+        <canvas id="plotAcc"></canvas></div>
+      <div class="canvas-wrap"><h4>Gyroscope
+        <span class="legend"><span><span class="sw" style="background:#ef4444"></span>Gx</span>
+        <span><span class="sw" style="background:#22c55e"></span>Gy</span>
+        <span><span class="sw" style="background:#3b82f6"></span>Gz</span></span></h4>
+        <canvas id="plotGyr"></canvas></div>
+    </div>
+
+    <div class="actions" id="dActions">
+      <button class="primary" id="btnJson">Download JSON</button>
+      <button id="btnMagCsv">Download Mag CSV</button>
+      <button id="btnImuCsv">Download IMU CSV</button>
+      ${teeLink?`<a href="${teeLink}" target="_blank" rel="noopener">Tee on OSM</a>`:''}
+      ${osmLink?`<a href="${osmLink}" target="_blank" rel="noopener">Landing on OSM</a>`:''}
+      <button id="btnCopyLink">Copy link</button>
+    </div>
+  `;
+}
+
+function wireDetailActions(t,raw){
+  const btnJson=document.getElementById('btnJson');
+  const btnMagCsv=document.getElementById('btnMagCsv');
+  const btnImuCsv=document.getElementById('btnImuCsv');
+  const btnCopy=document.getElementById('btnCopyLink');
+  if(btnJson)btnJson.onclick=()=>downloadJson(t,raw);
+  if(btnMagCsv)btnMagCsv.onclick=()=>downloadRawCsv(t,raw,'mag');
+  if(btnImuCsv)btnImuCsv.onclick=()=>downloadRawCsv(t,raw,'imu');
+  if(btnCopy)btnCopy.onclick=()=>{
+    navigator.clipboard.writeText(location.href).then(()=>{
+      btnCopy.textContent='Copied!';setTimeout(()=>btnCopy.textContent='Copy link',1200);
+    });
+  };
+  if(!raw){
+    if(btnMagCsv){btnMagCsv.disabled=true;btnMagCsv.style.opacity=.4;}
+    if(btnImuCsv){btnImuCsv.disabled=true;btnImuCsv.style.opacity=.4;}
+  }
+}
+
+// ═══════════ DOWNLOADS ═══════════
+function dl(name,text,mime='text/plain'){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([text],{type:mime}));
+  a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+function safeName(t){
+  const d=(t.created_at||'').slice(0,10);
+  const c=(t.collector||'anon').replace(/[^\w-]+/g,'_');
+  return `${d}_${c}_${t.id.slice(0,8)}`;
+}
+function downloadJson(t,raw){
+  const full={...t,raw_mag:raw?.raw_mag||null,raw_imu:raw?.raw_imu||null};
+  dl(`throw_${safeName(t)}.json`,JSON.stringify(full,null,2),'application/json');
+}
+function downloadRawCsv(t,raw,which){
+  if(!raw)return;
+  if(which==='mag'&&raw.raw_mag){
+    const hz=t.mag_rate_hz||100;
+    const lines=['t_s,mx_uT,my_uT,mz_uT'];
+    raw.raw_mag.forEach((s,i)=>lines.push(`${(i/hz).toFixed(4)},${s[0]},${s[1]},${s[2]}`));
+    dl(`throw_${safeName(t)}_mag.csv`,lines.join('\n'),'text/csv');
+  }else if(which==='imu'&&raw.raw_imu){
+    const hz=t.imu_rate_hz||500;
+    const lines=['t_s,ax_mps2,ay_mps2,az_mps2,gx_rads,gy_rads,gz_rads'];
+    raw.raw_imu.forEach((s,i)=>lines.push(`${(i/hz).toFixed(4)},${s[0]},${s[1]},${s[2]},${s[3]},${s[4]},${s[5]}`));
+    dl(`throw_${safeName(t)}_imu.csv`,lines.join('\n'),'text/csv');
+  }
+}
+
+// ═══════════ PLOT ═══════════
+function drawSeries(canvasId,samples,hz,labels,unit,idx){
+  const cv=document.getElementById(canvasId);if(!cv||!samples||samples.length<2)return;
+  const dp=devicePixelRatio||1;
+  cv.width=cv.clientWidth*dp;cv.height=cv.clientHeight*dp;
+  const cx=cv.getContext('2d');
+  const W=cv.width,H=cv.height;
+  const N=samples.length;
+  const accessor=idx||[0,1,2];
+  // Range
+  let mn=Infinity,mx=-Infinity;
+  for(let i=0;i<N;i++){for(const a of accessor){const v=+samples[i][a];if(v<mn)mn=v;if(v>mx)mx=v;}}
+  const rng=Math.max(mx-mn,.1);mn-=rng*.08;mx+=rng*.08;
+  // Grid
+  cx.fillStyle='#0a0e14';cx.fillRect(0,0,W,H);
+  cx.strokeStyle='#1e293b';cx.lineWidth=1;
+  for(let i=0;i<=4;i++){const y=i/4*H;cx.beginPath();cx.moveTo(0,y);cx.lineTo(W,y);cx.stroke();}
+  // Zero line if visible
+  if(mn<0&&mx>0){
+    const zy=H-((0-mn)/(mx-mn))*H;cx.strokeStyle='#334155';cx.setLineDash([3*dp,3*dp]);
+    cx.beginPath();cx.moveTo(0,zy);cx.lineTo(W,zy);cx.stroke();cx.setLineDash([]);
+  }
+  // Series
+  const cols=['#ef4444','#22c55e','#3b82f6'];
+  const step=Math.max(1,Math.floor(N/(W/dp)));
+  for(let a=0;a<3;a++){
+    cx.strokeStyle=cols[a];cx.lineWidth=1.2*dp;cx.beginPath();
+    for(let i=0;i<N;i+=step){
+      const v=+samples[i][accessor[a]];
+      const x=i/(N-1)*W;
+      const y=H-((v-mn)/(mx-mn))*H;
+      i===0?cx.moveTo(x,y):cx.lineTo(x,y);
+    }
+    cx.stroke();
+  }
+  // Axis labels (range + duration)
+  cx.fillStyle='#64748b';cx.font=`${9*dp}px ui-monospace,monospace`;
+  cx.fillText(mx.toFixed(1)+' '+unit,4*dp,10*dp);
+  cx.fillText(mn.toFixed(1)+' '+unit,4*dp,H-3*dp);
+  const durS=N/(hz||1);
+  cx.textAlign='right';cx.fillText(durS.toFixed(2)+' s',W-4*dp,H-3*dp);
+  cx.textAlign='left';
+}
+
+// ═══════════ UTIL ═══════════
+function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+</script>
+</body>
+</html>
