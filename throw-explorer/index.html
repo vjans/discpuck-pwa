@@ -64,6 +64,7 @@ tbody td.notes{max-width:220px;overflow:hidden;text-overflow:ellipsis}
   border-radius:5px;font-size:.68rem;color:var(--mt);font-family:inherit}
 .pill.bh{color:var(--bl);border-color:#1e3a5f} .pill.fh{color:var(--or);border-color:#5a3a0a}
 .pill.roller{color:var(--pr);border-color:#3a1e5a} .pill.thumber{color:var(--cy);border-color:#0a4a5a}
+.pill.net{color:var(--gn);border-color:#1a4a2a}
 .muted{color:var(--mt)}
 .big-n{color:var(--or);font-weight:700}
 
@@ -191,6 +192,7 @@ tbody tr.invalid .big-n{color:var(--mt)}
     <option value="">All types</option>
     <option value="BH">BH</option><option value="FH">FH</option>
     <option value="Roller">Roller</option><option value="Thumber">Thumber</option>
+    <option value="Net">Net</option>
     <option value="__unlabeled">Unlabeled</option>
   </select>
   <label class="toggle"><input type="checkbox" id="fValidOnly" checked>Valid only</label>
@@ -472,7 +474,7 @@ function renderDetailHtml(t,raw,loading){
   const hasTee=t.tee_lat!=null&&t.tee_lon!=null;
   const osmLink=hasLand?`https://www.openstreetmap.org/?mlat=${t.land_lat}&mlon=${t.land_lon}&zoom=19`:null;
   const teeLink=hasTee?`https://www.openstreetmap.org/?mlat=${t.tee_lat}&mlon=${t.tee_lon}&zoom=19`:null;
-  const typeChips=['BH','FH','Roller','Thumber'].map(v=>
+  const typeChips=['BH','FH','Roller','Thumber','Net'].map(v=>
     `<button type="button" class="chip-btn ${t.throw_type===v?'on':''}" data-field="throw_type" data-value="${v}">${v}</button>`
   ).join('');
   const effortChips=['25%','50%','75%','100%'].map(v=>

@@ -176,6 +176,11 @@ canvas{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);wi
 <!-- GPS warning (hidden when GPS is working) -->
 <div class="gps-warn" id="gpsWarn" style="display:none"></div>
 
+<!-- Net mode banner -->
+<div id="netBanner" style="display:none;background:linear-gradient(135deg,var(--pr),var(--cy));color:#fff;padding:.45rem .6rem;border-radius:var(--r);margin-bottom:.5rem;font-size:.8rem;font-weight:700;text-align:center;letter-spacing:.4px">
+  NET MODE · distance and GPS skipped · throws tagged "Net"
+</div>
+
 <!-- Status card — context-sensitive guidance -->
 <div class="status-card" id="statusCard"></div>
 
@@ -254,6 +259,7 @@ canvas{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);wi
 
 <!-- Bottom -->
 <div class="bottom">
+  <button id="btnNet" style="background:var(--cd);color:var(--mt);border:1px solid var(--bd)" onclick="toggleNet()">Net</button>
   <button style="background:var(--gn);color:#000" onclick="exportSession()">Export</button>
   <button style="background:var(--or);color:#000" onclick="setTee()">Set Tee</button>
   <button style="background:var(--rd);color:#fff" onclick="sendSleep()">Off</button>
@@ -293,6 +299,26 @@ let tee=null,pos=null,wx=null;
 let throws=[],plotMode='mag',lastThrow=null;
 let hdr=null,rxMag=[],rxImu=[],calibrating=false,lastDataTs=0,dumpStartTs=0,armTimeMs=0;
 let syncQueue=JSON.parse(localStorage.getItem('dp_queue')||'[]');
+let netMode=localStorage.getItem('dp_net')==='1';
+
+function toggleNet(){
+  netMode=!netMode;
+  localStorage.setItem('dp_net',netMode?'1':'0');
+  updateNetUI();
+  log('Net mode '+(netMode?'ON':'OFF'));
+}
+function updateNetUI(){
+  const btn=document.getElementById('btnNet');
+  const banner=document.getElementById('netBanner');
+  if(btn){
+    btn.textContent=netMode?'Net: ON':'Net';
+    btn.style.background=netMode?'var(--pr)':'var(--cd)';
+    btn.style.color=netMode?'#fff':'var(--mt)';
+    btn.style.border=netMode?'1px solid var(--pr)':'1px solid var(--bd)';
+  }
+  if(banner)banner.style.display=netMode?'block':'none';
+  renderGpsWarn(); // suppress GPS warning when in net mode
+}
 
 // ═══════════════════════════════════════════════════════════
 // ONBOARDING
@@ -316,7 +342,7 @@ const gpsH=[];
 let gpsState='waiting'; // 'waiting' | 'ok' | 'denied' | 'unavailable' | 'nofix'
 function renderGpsWarn(){
   const el=document.getElementById('gpsWarn');if(!el)return;
-  if(gpsState==='ok'||gpsState==='waiting'){el.style.display='none';return;}
+  if(netMode||gpsState==='ok'||gpsState==='waiting'){el.style.display='none';return;}
   el.style.display='block';el.className='gps-warn';
   if(gpsState==='denied'){
     el.innerHTML='\u26A0 GPS permission blocked \u2014 distance won\'t be recorded. Enable location for this site in your browser settings, then reload.';
@@ -579,15 +605,15 @@ function finishThrow(){
   let peakG=0;for(const s of rxImu){const g=Math.sqrt(s.ax*s.ax+s.ay*s.ay+s.az*s.az)/9.81;if(g>peakG)peakG=g;}
   const land=window._land||null;
   let dist=null,bear=null;
-  if(tee&&land){dist=+haversine(tee.lat,tee.lon,land.lat,land.lon).toFixed(1);bear=+bearing(tee.lat,tee.lon,land.lat,land.lon).toFixed(0);}
+  if(!netMode&&tee&&land){dist=+haversine(tee.lat,tee.lon,land.lat,land.lon).toFixed(1);bear=+bearing(tee.lat,tee.lon,land.lat,land.lon).toFixed(0);}
   const dur=rxMag.length>0?((rxMag.length-1)*mDt/1000):0;
 
   const t={id:throws.length+1,time:new Date().toISOString(),collector,disc:document.getElementById('sDisc').value,
-    tee:tee?{...tee}:null,landing:land,distance:dist,bearing:bear,wx:wx?{...wx}:null,
+    tee:netMode?null:(tee?{...tee}:null),landing:netMode?null:land,distance:dist,bearing:bear,wx:netMode?null:(wx?{...wx}:null),
     header:{...savedHdr},magSamples:[...rxMag],imuSamples:[...rxImu],
     duration:+dur.toFixed(1),peakRPM:rpm,crossRPM:0,peakG:+peakG.toFixed(1),
     releaseMs:null,landingMs:null,flightTime:null,estSpeed:null,spinQuality:null,hyzerAngle:null,noseAngle:null,
-    throwType:'',effort:'',notes:'',synced:false};
+    throwType:netMode?'Net':'',effort:'',notes:'',synced:false};
 
   analyzeThrow(t);
 
@@ -1216,7 +1242,7 @@ fetch('https://api.github.com/repos/vjans/discpuck-pwa/commits/master')
     BUILD=sha+' | '+date+' | '+msg;
     document.getElementById('buildInfo').textContent=BUILD;
   }).catch(()=>{document.getElementById('buildInfo').textContent='Build: offline';});
-checkOnboard();startGPS();setPhase('setup');renderCal();renderHist();
+checkOnboard();startGPS();setPhase('setup');renderCal();renderHist();updateNetUI();
 retrySyncQueue();
 if(!navigator.bluetooth)log('No Web Bluetooth. Use Bluefy on iOS.');
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
