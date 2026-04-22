@@ -110,6 +110,15 @@ details.tune summary{font-size:.8rem;font-weight:700;color:var(--bl);cursor:poin
   font-family:monospace;font-size:.6rem;max-height:55px;overflow-y:auto;color:var(--mt);margin-top:.4rem}
 
 .recv-pct{color:var(--gn);font-weight:700;margin-left:.3rem}
+
+/* Raw sensor graphs */
+.graphs{display:flex;flex-direction:column;gap:.3rem;margin-bottom:.4rem}
+.graph{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:.3rem .35rem .25rem}
+.glabel{font-size:.6rem;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;
+  font-weight:700;margin-bottom:.15rem;display:flex;justify-content:space-between}
+.glabel .legend{color:var(--mt);font-family:ui-monospace,monospace;font-size:.6rem}
+.glabel .legend .sx{color:#ef4444}.glabel .legend .sy{color:#22c55e}.glabel .legend .sz{color:#3b82f6}
+.graph canvas{height:110px;display:block;border:1px solid var(--bd);border-radius:5px;width:100%;background:var(--bg)}
 </style>
 </head>
 <body>
@@ -157,6 +166,21 @@ details.tune summary{font-size:.8rem;font-weight:700;color:var(--bl);cursor:poin
       <div class="mc rpm"><div class="v" id="mRpm">--</div><div class="u">RPM</div></div>
     </div>
 
+    <div class="graphs">
+      <div class="graph">
+        <div class="glabel"><span>Mag (µT)</span><span class="legend"><span class="sx">x</span> <span class="sy">y</span> <span class="sz">z</span></span></div>
+        <canvas id="gMag"></canvas>
+      </div>
+      <div class="graph">
+        <div class="glabel"><span>Accel (m/s²)</span><span class="legend"><span class="sx">ax</span> <span class="sy">ay</span> <span class="sz">az</span></span></div>
+        <canvas id="gAcc"></canvas>
+      </div>
+      <div class="graph">
+        <div class="glabel"><span>Gyro (rad/s)</span><span class="legend"><span class="sx">gx</span> <span class="sy">gy</span> <span class="sz">gz</span></span></div>
+        <canvas id="gGyr"></canvas>
+      </div>
+    </div>
+
     <details class="tune" open>
       <summary>Simulation tuning</summary>
       <div class="row"><label>Speed scale</label>
@@ -175,8 +199,8 @@ details.tune summary{font-size:.8rem;font-weight:700;color:var(--bl);cursor:poin
         <input type="range" id="tHt" min="0.5" max="2.0" step="0.05" value="1.4">
         <span class="val" id="vHt">1.4</span></div>
       <div class="row"><label>Early cut</label>
-        <input type="range" id="tEarlyCut" min="0.15" max="1.0" step="0.05" value="0.40">
-        <span class="val" id="vEarlyCut">40%</span></div>
+        <input type="range" id="tEarlyCut" min="0.15" max="1.0" step="0.05" value="1.0">
+        <span class="val" id="vEarlyCut">100%</span></div>
       <div style="font-size:.65rem;color:var(--mt);margin-top:.5rem;font-style:italic">
         Prototype physics. Speed est = peakG × scale × 0.7 m/s. Hyzer positive = left (RHBH). Nose positive = up.
         Early cut stops the dump once this fraction of the buffer is received — net impact tail skipped.
@@ -204,7 +228,7 @@ let phase='setup',device=null,dataC=null,ctrlC=null,statC=null;
 let collector=localStorage.getItem('dp_name')||'Victor';
 let throws=[],lastThrow=null;
 let hdr=null,rxMag=[],rxImu=[],lastDataTs=0,dumpStartTs=0,armTimeMs=0;
-const TUNE={speed:1.0,lift:0.9,drag:0.3,hyzer:1.5,ht:1.4,earlyCut:0.40};
+const TUNE={speed:1.0,lift:0.9,drag:0.3,hyzer:1.5,ht:1.4,earlyCut:1.0};
 
 // ═════════ LOG ═════════
 function log(m){const e=document.getElementById('log');
@@ -248,7 +272,8 @@ function onData(e){
     const total=hdr.magN+hdr.imuN;
     const p=Math.floor(received/total*100);
     const cutPct=Math.floor(TUNE.earlyCut*100);
-    document.getElementById('actHint').innerHTML='Transferring <span class="recv-pct">'+Math.min(p,100)+'%</span> · auto-finish at '+cutPct+'%';
+    const cutMsg=TUNE.earlyCut<1?(' · auto-finish at '+cutPct+'%'):'';
+    document.getElementById('actHint').innerHTML='Transferring <span class="recv-pct">'+Math.min(p,100)+'%</span>'+cutMsg;
     // Early-finish: net throws don't need the post-landing tail
     if(received/total>=TUNE.earlyCut){log('Auto-finish at '+p+'% (cut='+cutPct+'%)');finishThrow();return;}
     // Also finish if we somehow got everything
@@ -338,6 +363,7 @@ function finishThrow(){
     analyzeThrow(t);
     throws.push(t);lastThrow=t;
     updateMetrics(t);
+    drawAllGraphs(t);
     const path=simulatePath(t);
     lastThrow._path=path;
     playTrajectory(path,t.peakRPM||300);
@@ -721,6 +747,65 @@ function toggleTrail(){
 }
 function updateDist(path){} // no-op (overlay handles it during animation)
 
+// ═════════ RAW SENSOR GRAPHS (right column) ═════════
+function drawGraph(canvasId,samples,axes,unit,releaseMs,landingMs){
+  const cv=$(canvasId);if(!cv)return;
+  const dp=devicePixelRatio||1;
+  cv.width=cv.clientWidth*dp;cv.height=cv.clientHeight*dp;
+  const cx=cv.getContext('2d');
+  const W=cv.width,H=cv.height;
+  cx.fillStyle='#0a0e14';cx.fillRect(0,0,W,H);
+  if(!samples||samples.length<2)return;
+  // Range
+  let mn=Infinity,mx=-Infinity;
+  for(const s of samples)for(const k of axes){const v=s[k];if(v<mn)mn=v;if(v>mx)mx=v;}
+  const rng=Math.max(mx-mn,.1);mn-=rng*.08;mx+=rng*.08;
+  // Grid
+  cx.strokeStyle='#1e293b';cx.lineWidth=1;
+  for(let i=0;i<=3;i++){const y=i/3*H;cx.beginPath();cx.moveTo(0,y);cx.lineTo(W,y);cx.stroke();}
+  // Zero line
+  if(mn<0&&mx>0){
+    const zy=H-((0-mn)/(mx-mn))*H;
+    cx.strokeStyle='#334155';cx.setLineDash([3*dp,3*dp]);
+    cx.beginPath();cx.moveTo(0,zy);cx.lineTo(W,zy);cx.stroke();cx.setLineDash([]);
+  }
+  // Series
+  const cols=['#ef4444','#22c55e','#3b82f6'];
+  const tMax=samples[samples.length-1].t||1;
+  const step=Math.max(1,Math.floor(samples.length/(W/dp)));
+  for(let a=0;a<axes.length;a++){
+    cx.strokeStyle=cols[a];cx.lineWidth=1.2*dp;cx.beginPath();
+    for(let i=0;i<samples.length;i+=step){
+      const v=samples[i][axes[a]],x=(samples[i].t/tMax)*W,y=H-((v-mn)/(mx-mn))*H;
+      i===0?cx.moveTo(x,y):cx.lineTo(x,y);
+    }
+    cx.stroke();
+  }
+  // Release/landing markers
+  const mark=(t_ms,color)=>{
+    if(t_ms==null)return;
+    const x=(t_ms/tMax)*W;
+    cx.strokeStyle=color;cx.lineWidth=1.3*dp;cx.setLineDash([4*dp,3*dp]);
+    cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,H);cx.stroke();cx.setLineDash([]);
+  };
+  mark(releaseMs,'#f59e0b');
+  mark(landingMs,'#ef4444');
+  // Range labels
+  cx.fillStyle='#64748b';cx.font=`${9*dp}px ui-monospace,monospace`;
+  cx.fillText(mx.toFixed(1)+' '+unit,4*dp,10*dp);
+  cx.fillText(mn.toFixed(1)+' '+unit,4*dp,H-3*dp);
+  cx.textAlign='right';cx.fillText((tMax/1000).toFixed(2)+'s',W-4*dp,H-3*dp);
+  cx.textAlign='left';
+}
+function drawAllGraphs(t){
+  if(!t){
+    drawGraph('gMag',null);drawGraph('gAcc',null);drawGraph('gGyr',null);return;
+  }
+  drawGraph('gMag',t.magSamples,['x','y','z'],'µT',t.releaseMs,t.landingMs);
+  drawGraph('gAcc',t.imuSamples,['ax','ay','az'],'m/s²',t.releaseMs,t.landingMs);
+  drawGraph('gGyr',t.imuSamples,['gx','gy','gz'],'rad/s',t.releaseMs,t.landingMs);
+}
+
 // ═════════ HISTORY + SYNC ═════════
 function renderHist(){
   const el=$('histList');
@@ -735,7 +820,7 @@ function renderHist(){
 }
 function viewThrow(id){
   const t=throws.find(x=>x.id===id);if(!t)return;
-  lastThrow=t;updateMetrics(t);
+  lastThrow=t;updateMetrics(t);drawAllGraphs(t);
   const path=t._path||simulatePath(t);t._path=path;
   playTrajectory(path,t.peakRPM||300);
 }
