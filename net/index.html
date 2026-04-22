@@ -522,20 +522,56 @@ function analyzeThrow(t){
     }
   }
 
-  // RPM from FFT of mag during flight (tracks gyro_rpm from main app)
+  // ── RPM ──
+  // Flight windows are often <0.5 s — too short for FFT to resolve. Use
+  // (a) gyro directly when it isn't saturated, else (b) mag zero-crossings.
+  // LSM6DSO @ ±2000 dps saturates at ~34.9 rad/s (333 RPM); above that the
+  // gyro reads the ceiling and mag is the only honest source.
   {
-    const ms=Math.min(Math.floor(t.releaseMs/mDt),mag.length-1);
-    const me=Math.min(t.landingMs!=null?Math.floor(t.landingMs/mDt):mag.length,mag.length);
-    const fm=mag.slice(Math.max(0,ms),Math.min(me,ms+2048));
-    if(fm.length>=32){
-      const N=2**Math.floor(Math.log2(fm.length));
-      const sig=fm.slice(0,N).map(s=>s.x);
-      const mn=sig.reduce((a,b)=>a+b,0)/sig.length;
-      const w=sig.map((v,i)=>(v-mn)*.5*(1-Math.cos(2*Math.PI*i/(sig.length-1))));
-      const mg=fft(w);
-      let bB=1,bV=0;for(let k=2;k<mg.length-1;k++)if(mg[k]>bV){bV=mg[k];bB=k;}
-      const sr=1000/mDt,fR=sr/N;
-      t.peakRPM=Math.round(bB*fR*60);t.crossRPM=t.peakRPM;
+    const GYRO_SAT=33.0; // rad/s — conservative saturation cutoff
+    if(relIdx>=0&&landIdx>relIdx){
+      const flightImu=imu.slice(relIdx,landIdx+1);
+      // Peak and mean |gz| over flight
+      let peakGz=0,sumGz=0;
+      for(const s of flightImu){const a=Math.abs(s.gz);if(a>peakGz)peakGz=a;sumGz+=a;}
+      const meanGz=sumGz/flightImu.length;
+      if(peakGz>0&&peakGz<GYRO_SAT){
+        // Not saturated — gyro IS the spin rate
+        const rpm=Math.round(meanGz*60/(2*Math.PI));
+        t.peakRPM=rpm;t.crossRPM=rpm;
+        log('RPM: gyro-direct |gz|~'+meanGz.toFixed(1)+' rad/s → '+rpm+' RPM');
+      }else{
+        // Saturated — count mag zero-crossings instead
+        const ms0=Math.floor(t.releaseMs/mDt),me0=Math.floor((t.landingMs||mag.length*mDt)/mDt);
+        const fm=mag.slice(Math.max(0,ms0),Math.min(mag.length,me0));
+        if(fm.length>=4){
+          // Pick the axis with highest variance — that's perpendicular to spin
+          let bestAx='x',bestVar=0;
+          for(const ax of ['x','y','z']){
+            const vals=fm.map(s=>s[ax]);
+            const m=vals.reduce((a,b)=>a+b,0)/vals.length;
+            const v=vals.reduce((a,b)=>a+(b-m)*(b-m),0)/vals.length;
+            if(v>bestVar){bestVar=v;bestAx=ax;}
+          }
+          const vals=fm.map(s=>s[bestAx]);
+          const m=vals.reduce((a,b)=>a+b,0)/vals.length;
+          let crossings=0;
+          for(let i=1;i<vals.length;i++){
+            if((vals[i]-m>0)!==(vals[i-1]-m>0))crossings++;
+          }
+          const flightMs=(fm.length-1)*mDt;
+          if(crossings>=2&&flightMs>80){
+            const freqHz=crossings/(2*flightMs/1000);
+            const rpm=Math.round(freqHz*60);
+            t.peakRPM=rpm;t.crossRPM=rpm;
+            log('RPM: mag.'+bestAx+' zero-crossings '+crossings+' in '+flightMs.toFixed(0)+'ms → '+rpm+' RPM (gyro sat @'+peakGz.toFixed(1)+')');
+          }else{
+            log('RPM: too few crossings ('+crossings+') or window too short ('+flightMs.toFixed(0)+'ms)');
+          }
+        }
+      }
+    }else{
+      log('RPM: no flight window');
     }
   }
 }
