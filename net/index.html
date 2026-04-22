@@ -174,8 +174,12 @@ details.tune summary{font-size:.8rem;font-weight:700;color:var(--bl);cursor:poin
       <div class="row"><label>Release ht</label>
         <input type="range" id="tHt" min="0.5" max="2.0" step="0.05" value="1.4">
         <span class="val" id="vHt">1.4</span></div>
+      <div class="row"><label>Early cut</label>
+        <input type="range" id="tEarlyCut" min="0.15" max="1.0" step="0.05" value="0.40">
+        <span class="val" id="vEarlyCut">40%</span></div>
       <div style="font-size:.65rem;color:var(--mt);margin-top:.5rem;font-style:italic">
         Prototype physics. Speed est = peakG × scale × 0.7 m/s. Hyzer positive = left (RHBH). Nose positive = up.
+        Early cut stops the dump once this fraction of the buffer is received — net impact tail skipped.
       </div>
     </details>
 
@@ -200,7 +204,7 @@ let phase='setup',device=null,dataC=null,ctrlC=null,statC=null;
 let collector=localStorage.getItem('dp_name')||'Victor';
 let throws=[],lastThrow=null;
 let hdr=null,rxMag=[],rxImu=[],lastDataTs=0,dumpStartTs=0,armTimeMs=0;
-const TUNE={speed:1.0,lift:0.9,drag:0.3,hyzer:1.5,ht:1.4};
+const TUNE={speed:1.0,lift:0.9,drag:0.3,hyzer:1.5,ht:1.4,earlyCut:0.40};
 
 // ═════════ LOG ═════════
 function log(m){const e=document.getElementById('log');
@@ -240,8 +244,14 @@ function onData(e){
     az:b.getInt16(4,true)/100,gx:b.getInt16(6,true)/100,gy:b.getInt16(8,true)/100,gz:b.getInt16(10,true)/100});}
   if(hdr){
     lastDataTs=Date.now();
-    const p=Math.floor((rxMag.length+rxImu.length)/(hdr.magN+hdr.imuN)*100);
-    document.getElementById('actHint').innerHTML='Transferring throw data <span class="recv-pct">'+Math.min(p,100)+'%</span>';
+    const received=rxMag.length+rxImu.length;
+    const total=hdr.magN+hdr.imuN;
+    const p=Math.floor(received/total*100);
+    const cutPct=Math.floor(TUNE.earlyCut*100);
+    document.getElementById('actHint').innerHTML='Transferring <span class="recv-pct">'+Math.min(p,100)+'%</span> · auto-finish at '+cutPct+'%';
+    // Early-finish: net throws don't need the post-landing tail
+    if(received/total>=TUNE.earlyCut){log('Auto-finish at '+p+'% (cut='+cutPct+'%)');finishThrow();return;}
+    // Also finish if we somehow got everything
     if(rxMag.length>=hdr.magN&&rxImu.length>=hdr.imuN)finishThrow();
   }
 }
@@ -256,8 +266,8 @@ function setPhase(p){
   phase=p;const btn=document.getElementById('actBtn'),hint=document.getElementById('actHint');
   btn.className='';
   if(p==='setup'){btn.className='btn-connect';btn.textContent='CONNECT PUCK';hint.textContent='Pair over Bluetooth to begin';}
-  else if(p==='ready'){btn.className='btn-arm';btn.textContent='ARM PUCK';hint.textContent='Tap to arm, then throw. Puck stays connected.';}
-  else if(p==='armed'){btn.className='btn-stop';btn.textContent='THROW → TAP DONE';hint.textContent='Throw your disc, then tap to stop & download.';}
+  else if(p==='ready'){btn.className='btn-arm';btn.textContent='ARM PUCK';hint.textContent='Tap, HOLD STILL ~2 s at throw angle, then throw. Puck stays connected.';}
+  else if(p==='armed'){btn.className='btn-stop';btn.textContent='THROW → TAP DONE';hint.textContent='Hold still a moment · throw · tap when disc has landed.';}
   else if(p==='recv'){btn.className='btn-recv';btn.textContent='DOWNLOADING…';hint.textContent='Tap again to finish with partial data if stuck.';}
   else if(p==='done'){btn.className='btn-next';btn.textContent='NEW THROW';hint.textContent='Tap to arm again for the next net throw.';}
 }
@@ -372,51 +382,64 @@ function analyzeThrow(t){
   t.landingMs=landIdx>=0?+(landIdx*iDt).toFixed(0):null;
   t.flightTime=t.landingMs!=null?+((t.landingMs-t.releaseMs)/1000).toFixed(2):null;
 
-  // Hyzer/nose from pre-throw orientation
+  // Hyzer/nose from pre-throw orientation.
+  // Relaxed from the main-app window of [rel-2000ms, rel-500ms]: for net throws
+  // users often throw right after arming, so we accept as little as 100ms of
+  // pre-throw data ending 50ms before release.
   {
     const preS=Math.max(0,relIdx-Math.floor(2000/iDt));
-    const preE=Math.max(0,relIdx-Math.floor(500/iDt));
+    const preE=Math.max(0,relIdx-Math.floor(50/iDt));
+    const minSamples=Math.max(5,Math.floor(100/iDt));
     if(preE>preS){
       const pw=imu.slice(preS,preE);
-      if(pw.length>=10){
+      if(pw.length>=minSamples){
         let gx=0,gy=0,gz=0;
         for(const s of pw){gx+=s.ax;gy+=s.ay;gz+=s.az;}
         gx/=pw.length;gy/=pw.length;gz/=pw.length;
         if(gz<0){gx=-gx;gy=-gy;gz=-gz;}
         t.hyzerAngle=+(Math.atan2(gx,gz)*180/Math.PI).toFixed(1);
         t.noseAngle =+(Math.atan2(gy,gz)*180/Math.PI).toFixed(1);
-      }
-    }
+        log('hyzer/nose: '+pw.length+' pre-samples ('+((preE-preS)*iDt).toFixed(0)+'ms)');
+      }else{log('hyzer/nose skipped: only '+pw.length+' samples, need '+minSamples+' — hold disc still longer before throwing');}
+    }else{log('hyzer/nose skipped: release at sample '+relIdx+' (no pre-throw window) — hold disc still for >=0.5s before throwing');}
   }
 
-  // Launch angle: velocity direction just after release from integrated accel (gravity-removed)
+  // Launch angle: velocity direction just after release from integrated accel (gravity-removed).
+  // Gravity must come from a real pre-throw window — falling back to (0,0,9.81) gives
+  // bogus integrated velocity and a ~0° launch angle.
   {
     const preS=Math.max(0,relIdx-Math.floor(500/iDt));
-    const pw=imu.slice(preS,Math.max(preS+5,relIdx));
-    let gx=0,gy=0,gz=9.81;
-    if(pw.length>=5){gx=0;gy=0;gz=0;
-      for(const s of pw){gx+=s.ax;gy+=s.ay;gz+=s.az;}
-      gx/=pw.length;gy/=pw.length;gz/=pw.length;
+    const preE=Math.max(0,relIdx-Math.floor(50/iDt));
+    let gx=0,gy=0,gz=0,gravValid=false;
+    if(preE>preS){
+      const pw=imu.slice(preS,preE);
+      if(pw.length>=5){
+        for(const s of pw){gx+=s.ax;gy+=s.ay;gz+=s.az;}
+        gx/=pw.length;gy/=pw.length;gz/=pw.length;
+        const gM=Math.sqrt(gx*gx+gy*gy+gz*gz);
+        if(gM>5&&gM<15)gravValid=true;  // sanity: 0.5g - 1.5g
+      }
     }
-    // Integrate accel minus gravity for 100 ms after release
-    const nIntg=Math.min(imu.length-relIdx,Math.floor(100/iDt));
-    let vx=0,vy=0,vz=0;
-    for(let i=relIdx;i<relIdx+nIntg;i++){
-      vx+=(imu[i].ax-gx)*iDt/1000;
-      vy+=(imu[i].ay-gy)*iDt/1000;
-      vz+=(imu[i].az-gz)*iDt/1000;
-    }
-    const vh=Math.sqrt(vx*vx+vy*vy);
-    if(vh>0.1){
-      // In sensor frame, launch pitch = angle between (vx,vy) and vz
-      // Up-vector is approximately (gx,gy,gz) normalized. Project vz onto up.
-      const gM=Math.sqrt(gx*gx+gy*gy+gz*gz)||9.81;
-      const up={x:gx/gM,y:gy/gM,z:gz/gM};
-      const vDotUp=vx*up.x+vy*up.y+vz*up.z;
-      const vMag=Math.sqrt(vx*vx+vy*vy+vz*vz);
-      // Sign convention: vDotUp > 0 means throwing upward relative to gravity
-      const launch=Math.asin(Math.max(-1,Math.min(1,vDotUp/(vMag||1))))*180/Math.PI;
-      t.extMetrics={launch:{velocity_deg:+launch.toFixed(1)}};
+    if(!gravValid){
+      log('launch angle skipped: no valid pre-throw gravity');
+    }else{
+      // Integrate accel minus gravity for 100 ms after release
+      const nIntg=Math.min(imu.length-relIdx,Math.floor(100/iDt));
+      let vx=0,vy=0,vz=0;
+      for(let i=relIdx;i<relIdx+nIntg;i++){
+        vx+=(imu[i].ax-gx)*iDt/1000;
+        vy+=(imu[i].ay-gy)*iDt/1000;
+        vz+=(imu[i].az-gz)*iDt/1000;
+      }
+      const vh=Math.sqrt(vx*vx+vy*vy);
+      if(vh>0.1){
+        const gM=Math.sqrt(gx*gx+gy*gy+gz*gz)||9.81;
+        const up={x:gx/gM,y:gy/gM,z:gz/gM};
+        const vDotUp=vx*up.x+vy*up.y+vz*up.z;
+        const vMag=Math.sqrt(vx*vx+vy*vy+vz*vz);
+        const launch=Math.asin(Math.max(-1,Math.min(1,vDotUp/(vMag||1))))*180/Math.PI;
+        t.extMetrics={launch:{velocity_deg:+launch.toFixed(1)}};
+      }
     }
   }
 
@@ -751,6 +774,10 @@ function wireTune(){
   bind('Drag','drag',v=>v.toFixed(2));
   bind('Hyzer','hyzer',v=>v.toFixed(1));
   bind('Ht','ht',v=>v.toFixed(1));
+  // Early-cut doesn't re-simulate (applies to next dump only)
+  const ec=$('tEarlyCut'),ev=$('vEarlyCut');
+  ec.value=TUNE.earlyCut;ev.textContent=Math.round(+ec.value*100)+'%';
+  ec.addEventListener('input',()=>{TUNE.earlyCut=+ec.value;ev.textContent=Math.round(+ec.value*100)+'%';});
 }
 
 // ═════════ INIT ═════════
