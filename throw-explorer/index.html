@@ -113,6 +113,37 @@ dialog.detail::backdrop{background:rgba(0,0,0,.75);backdrop-filter:blur(3px)}
   border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:.4rem}
 @keyframes spin{to{transform:rotate(360deg)}}
 
+/* Label editor */
+.label-editor{display:flex;flex-direction:column;gap:.4rem;margin-bottom:.7rem}
+.lbl-row{display:flex;flex-wrap:wrap;gap:.25rem;align-items:center}
+.lbl-row .lbl-l{font-size:.65rem;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;
+  font-weight:700;min-width:50px}
+.lbl-row input{flex:1;min-width:200px;background:var(--bg);border:1px solid var(--bd);color:var(--tx);
+  padding:.35rem .55rem;border-radius:7px;font-size:.8rem;font-family:inherit}
+.chip-btn{font-size:.72rem;padding:.25rem .6rem;background:var(--cd);color:var(--mt);border:1px solid var(--bd);
+  border-radius:6px;cursor:pointer;font-weight:600;transition:all .12s;font-family:inherit}
+.chip-btn:hover{color:var(--tx);border-color:var(--mt)}
+.chip-btn.on{background:var(--bl);color:#fff;border-color:var(--bl)}
+.chip-btn:active{transform:scale(.95)}
+.chip-btn:disabled{opacity:.5;cursor:wait}
+
+.save-status{display:inline-block;font-size:.62rem;font-weight:700;margin-left:.5rem;letter-spacing:.4px;
+  color:var(--mt);text-transform:uppercase;min-width:60px}
+.save-status.saving{color:var(--or)}
+.save-status.saved{color:var(--gn)}
+.save-status.error{color:var(--rd)}
+
+/* Delete button — lives in the actions row, red-tinted so it's obvious */
+.actions .del{background:#2a1216;border-color:#7f1d1d;color:var(--rd)}
+.actions .del:hover{background:var(--rd);color:#fff;border-color:var(--rd)}
+.actions .del:disabled{opacity:.55;cursor:wait}
+
+/* Inline row delete */
+.row-del{background:transparent;border:1px solid transparent;color:var(--mt);
+  padding:.2rem .5rem;border-radius:5px;font-size:.9rem;line-height:1;cursor:pointer;
+  font-weight:700;font-family:inherit}
+.row-del:hover{color:var(--rd);border-color:#7f1d1d;background:#2a1216}
+
 @media(max-width:700px){
   body{padding:.4rem;font-size:13px}
   .hdr h1{font-size:1.1rem}
@@ -328,20 +359,20 @@ function render(){
     const sorted=c.k===sortKey;
     const arrow=sorted?(sortDir==='desc'?'▼':'▲'):'';
     return `<th class="${c.colHide||''} ${sorted?'sorted':''}" data-k="${c.k}">${c.l}<span class="arrow">${arrow}</span></th>`;
-  }).join('');
+  }).join('')+'<th aria-label="Delete"></th>';
   const tbody=rows.map(t=>{
     const tds=COLS.map(c=>{
       const v=t[c.k];
       return `<td class="${c.cls||''} ${c.colHide||''}">${c.fmt(v)}</td>`;
     }).join('');
-    return `<tr data-id="${t.id}">${tds}</tr>`;
+    return `<tr data-id="${t.id}">${tds}<td><button class="row-del" data-id="${t.id}" title="Delete throw">&times;</button></td></tr>`;
   }).join('');
   document.getElementById('tblWrap').innerHTML=`<table>
     <thead><tr>${thead}</tr></thead>
     <tbody>${tbody}</tbody>
   </table>`;
   // Wire sorting + row clicks
-  document.querySelectorAll('thead th').forEach(th=>{
+  document.querySelectorAll('thead th[data-k]').forEach(th=>{
     th.addEventListener('click',()=>{
       const k=th.dataset.k;
       if(sortKey===k){sortDir=sortDir==='desc'?'asc':'desc';}
@@ -350,7 +381,24 @@ function render(){
     });
   });
   document.querySelectorAll('tbody tr').forEach(tr=>{
-    tr.addEventListener('click',()=>openDetail(tr.dataset.id));
+    tr.addEventListener('click',e=>{
+      if(e.target.closest('.row-del'))return;
+      openDetail(tr.dataset.id);
+    });
+  });
+  document.querySelectorAll('.row-del').forEach(btn=>{
+    btn.addEventListener('click',async e=>{
+      e.stopPropagation();
+      const id=btn.dataset.id;
+      btn.disabled=true;btn.textContent='…';
+      try{
+        await deleteThrow(id);
+        removeLocalThrow(id);
+      }catch(err){
+        btn.disabled=false;btn.innerHTML='&times;';
+        alert('Delete failed: '+err.message);
+      }
+    });
   });
 }
 
@@ -389,15 +437,28 @@ function renderDetailHtml(t,raw,loading){
   const hasTee=t.tee_lat!=null&&t.tee_lon!=null;
   const osmLink=hasLand?`https://www.openstreetmap.org/?mlat=${t.land_lat}&mlon=${t.land_lon}&zoom=19`:null;
   const teeLink=hasTee?`https://www.openstreetmap.org/?mlat=${t.tee_lat}&mlon=${t.tee_lon}&zoom=19`:null;
+  const typeChips=['BH','FH','Roller','Thumber'].map(v=>
+    `<button type="button" class="chip-btn ${t.throw_type===v?'on':''}" data-field="throw_type" data-value="${v}">${v}</button>`
+  ).join('');
+  const effortChips=['25%','50%','75%','100%'].map(v=>
+    `<button type="button" class="chip-btn ${t.effort===v?'on':''}" data-field="effort" data-value="${v}">${v}</button>`
+  ).join('');
   return `
-    <div class="section-h">Labels &amp; Context</div>
+    <div class="section-h">Context</div>
     <div class="grid">
       ${gi('Collector',escapeHtml(t.collector||'—'),'text')}
       ${gi('Disc',escapeHtml(t.disc||'—'),'text')}
-      ${gi('Type',t.throw_type?`<span class="pill ${t.throw_type.toLowerCase()}">${escapeHtml(t.throw_type)}</span>`:'<span class="muted">—</span>','text')}
-      ${gi('Effort',escapeHtml(t.effort||'—'),'text')}
-      ${gi('Notes',escapeHtml(t.notes||'—'),'text')}
       ${gi('Recorded',t.created_at?t.created_at.slice(0,19).replace('T',' '):'—')}
+    </div>
+
+    <div class="section-h">Labels <span class="save-status" id="saveStatus"></span></div>
+    <div class="label-editor">
+      <div class="lbl-row"><span class="lbl-l">Type</span>${typeChips}</div>
+      <div class="lbl-row"><span class="lbl-l">Effort</span>${effortChips}</div>
+      <div class="lbl-row"><span class="lbl-l">Notes</span>
+        <input type="text" id="notesInput" value="${escapeHtml(t.notes||'')}" placeholder="e.g. dropped, wind gust, practice throw">
+      </div>
+      <div style="font-size:.65rem;color:var(--mt);font-style:italic">Click an active chip to clear it. Notes save on blur or Enter.</div>
     </div>
 
     <div class="section-h">Flight Metrics</div>
@@ -461,6 +522,7 @@ function renderDetailHtml(t,raw,loading){
     </div>
 
     <div class="actions" id="dActions">
+      <button class="del" id="btnDelete">Delete throw</button>
       <button class="primary" id="btnJson">Download JSON</button>
       <button id="btnMagCsv">Download Mag CSV</button>
       <button id="btnImuCsv">Download IMU CSV</button>
@@ -487,6 +549,114 @@ function wireDetailActions(t,raw){
   if(!raw){
     if(btnMagCsv){btnMagCsv.disabled=true;btnMagCsv.style.opacity=.4;}
     if(btnImuCsv){btnImuCsv.disabled=true;btnImuCsv.style.opacity=.4;}
+  }
+
+  // Label chips — click active chip to clear, otherwise set
+  document.querySelectorAll('.label-editor .chip-btn').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const field=btn.dataset.field;
+      const chipValue=btn.dataset.value;
+      const newValue=t[field]===chipValue?null:chipValue;
+      // Update UI state immediately
+      document.querySelectorAll(`.label-editor [data-field="${field}"]`).forEach(b=>{
+        b.classList.toggle('on',b.dataset.value===(newValue||''));
+      });
+      await saveField(t,field,newValue);
+    });
+  });
+
+  // Notes input — save on change (blur) and on Enter
+  const notes=document.getElementById('notesInput');
+  if(notes){
+    notes.addEventListener('change',()=>{
+      const v=notes.value.trim();
+      saveField(t,'notes',v||null);
+    });
+    notes.addEventListener('keydown',e=>{if(e.key==='Enter')notes.blur();});
+  }
+
+  // Delete — single click, no confirmation
+  const btnDel=document.getElementById('btnDelete');
+  if(btnDel){
+    btnDel.addEventListener('click',async()=>{
+      btnDel.disabled=true;btnDel.textContent='Deleting…';
+      try{
+        await deleteThrow(t.id);
+        removeLocalThrow(t.id);
+        closeDetail();
+      }catch(e){
+        btnDel.disabled=false;btnDel.textContent='Delete throw';
+        alert('Delete failed: '+e.message);
+      }
+    });
+  }
+}
+
+function removeLocalThrow(id){
+  allThrows=allThrows.filter(x=>x.id!==id);
+  renderStats();populateFilters();render();
+}
+
+// ═══════════ EDIT / DELETE ═══════════
+// Supabase/PostgREST returns 200/204 with body "[]" when RLS filters out the row,
+// so we request return=representation and treat an empty array as a silent RLS denial.
+const RLS_HINT='Supabase RLS blocked the write. Run the UPDATE/DELETE policies on public.throws.';
+
+async function patchThrow(id,patch){
+  const r=await fetch(`${SUPA_URL}/rest/v1/throws?id=eq.${encodeURIComponent(id)}`,{
+    method:'PATCH',
+    headers:{apikey:SUPA_KEY,Authorization:'Bearer '+SUPA_KEY,
+      'Content-Type':'application/json','Prefer':'return=representation'},
+    body:JSON.stringify(patch)
+  });
+  if(!r.ok)throw new Error(`HTTP ${r.status}: ${await r.text()}`);
+  const rows=await r.json();
+  if(!rows.length)throw new Error(RLS_HINT);
+}
+
+async function deleteThrow(id){
+  const r=await fetch(`${SUPA_URL}/rest/v1/throws?id=eq.${encodeURIComponent(id)}`,{
+    method:'DELETE',
+    headers:{apikey:SUPA_KEY,Authorization:'Bearer '+SUPA_KEY,'Prefer':'return=representation'}
+  });
+  if(!r.ok)throw new Error(`HTTP ${r.status}: ${await r.text()}`);
+  const rows=await r.json();
+  if(!rows.length)throw new Error(RLS_HINT);
+}
+
+function showSave(state){
+  const el=document.getElementById('saveStatus');if(!el)return;
+  el.className='save-status '+(state||'');
+  el.textContent=state==='saving'?'Saving…':state==='saved'?'Saved':state==='error'?'Failed':'';
+  if(state==='saved')setTimeout(()=>{if(el.textContent==='Saved'){el.textContent='';el.className='save-status';}},1400);
+}
+
+async function saveField(t,field,value){
+  const prev=t[field];
+  if(prev===value)return;
+  t[field]=value;
+  const idx=allThrows.findIndex(x=>x.id===t.id);
+  if(idx>=0)allThrows[idx][field]=value;
+  showSave('saving');
+  try{
+    await patchThrow(t.id,{[field]:value});
+    showSave('saved');
+    // Re-render table & stats so chip/filter/sort reflect new state
+    render();
+    // Labels don't affect the stats strip, skip that
+  }catch(e){
+    t[field]=prev;
+    if(idx>=0)allThrows[idx][field]=prev;
+    showSave('error');
+    console.error('PATCH failed',e);
+    // Revert chip UI
+    if(field==='throw_type'||field==='effort'){
+      document.querySelectorAll(`.label-editor [data-field="${field}"]`).forEach(b=>{
+        b.classList.toggle('on',b.dataset.value===(prev||''));
+      });
+    }else if(field==='notes'){
+      const n=document.getElementById('notesInput');if(n)n.value=prev||'';
+    }
   }
 }
 
