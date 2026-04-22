@@ -380,47 +380,54 @@ function analyzeThrow(t){
   const iDt=imu.length>1?imu[imu.length-1].t/(imu.length-1):10;
   const mDt=mag.length>1?mag[mag.length-1].t/(mag.length-1):2;
 
-  // ── Release / Landing from d(gz)/dt ──
-  // gz ramps up during wind-up, plateaus during flight (spin is stable),
-  // spikes again on impact. So:
-  //   release = first sample where |d(gz)/dt| drops below LOW after being above HIGH
-  //             (end of wind-up ramp = spin rate has plateaued)
-  //   landing = first sample where |d(gz)/dt| exceeds HIGH again after release
-  //             (impact breaks the plateau)
+  // ── Release / Landing: the sustained |gz| plateau is the flight ──
+  // During flight, gz sits at a roughly constant high-magnitude value (the
+  // spin rate is stable). Before flight gz ramps up from zero; after landing
+  // it's chaotic and then decays.  Formally: find the longest contiguous
+  // window where smoothed |gz| stays above a fraction of its peak — that
+  // window IS the flight, and it maximises the "area under |gz|".
   let relIdx=-1,landIdx=-1;
   {
     const N=imu.length;
-    // Smooth gz before differentiating so single-sample noise doesn't trigger.
-    const smW=Math.max(2,Math.floor(25/iDt));
-    const gzS=new Float64Array(N);
+    const smW=Math.max(2,Math.floor(30/iDt));
+    const gzA=new Float64Array(N);
     for(let i=0;i<N;i++){
       const lo=Math.max(0,i-smW),hi=Math.min(N,i+smW+1);
-      let s=0;for(let j=lo;j<hi;j++)s+=imu[j].gz;
-      gzS[i]=s/(hi-lo);
+      let s=0;for(let j=lo;j<hi;j++)s+=Math.abs(imu[j].gz);
+      gzA[i]=s/(hi-lo);
     }
-    const dtSec=iDt/1000;
-    const dgz=new Float64Array(N);
-    for(let i=1;i<N-1;i++)dgz[i]=Math.abs((gzS[i+1]-gzS[i-1])/(2*dtSec));
-    // Fixed thresholds tuned to disc dynamics.
-    // Wind-up rate-of-change peaks around 50-200 rad/s², landing impacts 500+ rad/s².
-    const HIGH=60,LOW=20;
-    // Release = first sustained dip into LOW after having crossed HIGH
-    let wasHigh=false,lowRun=0;
-    const lowHoldN=Math.max(2,Math.floor(30/iDt)); // need 30ms of quiet to confirm plateau
-    for(let i=1;i<N-1;i++){
-      if(dgz[i]>HIGH){wasHigh=true;lowRun=0;}
-      else if(wasHigh&&dgz[i]<LOW){lowRun++;if(lowRun>=lowHoldN){relIdx=i-lowRun+1;break;}}
-      else lowRun=0;
-    }
-    // Landing = next sample where dgz crosses HIGH after release + min flight
-    if(relIdx>=0){
-      const minFlightN=Math.max(1,Math.floor(100/iDt));
-      for(let i=relIdx+minFlightN;i<N-1;i++){
-        if(dgz[i]>HIGH){landIdx=i;break;}
+    let peak=0;for(let i=0;i<N;i++)if(gzA[i]>peak)peak=gzA[i];
+    if(peak<5){
+      log('detect: peak |gz|='+peak.toFixed(1)+' rad/s — no real spin detected');
+    }else{
+      const thresh=peak*0.5;          // anything above half of peak counts as in-plateau
+      const minRunN=Math.max(2,Math.floor(60/iDt)); // at least 60 ms of plateau
+      let bestStart=-1,bestLen=0,curStart=-1;
+      for(let i=0;i<N;i++){
+        if(gzA[i]>thresh){
+          if(curStart<0)curStart=i;
+        }else{
+          if(curStart>=0){
+            const L=i-curStart;
+            if(L>bestLen){bestLen=L;bestStart=curStart;}
+            curStart=-1;
+          }
+        }
+      }
+      if(curStart>=0){
+        const L=N-curStart;
+        if(L>bestLen){bestLen=L;bestStart=curStart;}
+      }
+      if(bestStart>=0&&bestLen>=minRunN){
+        relIdx=bestStart;
+        landIdx=bestStart+bestLen-1;
+        log('detect: peak|gz|='+peak.toFixed(1)+' thr='+thresh.toFixed(1)
+           +' plateau '+(bestLen*iDt).toFixed(0)+'ms'
+           +' rel='+(relIdx*iDt).toFixed(0)+'ms land='+(landIdx*iDt).toFixed(0)+'ms');
+      }else{
+        log('detect: plateau too short (longest='+(bestLen*iDt).toFixed(0)+'ms, need '+(minRunN*iDt).toFixed(0)+'ms)');
       }
     }
-    log('detect: relIdx='+relIdx+(relIdx>=0?'('+(relIdx*iDt).toFixed(0)+'ms)':'')
-        +' landIdx='+landIdx+(landIdx>=0?'('+(landIdx*iDt).toFixed(0)+'ms)':''));
   }
 
   // Fallback if the gz-derivative method didn't find a release
