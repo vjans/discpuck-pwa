@@ -380,27 +380,73 @@ function analyzeThrow(t){
   const iDt=imu.length>1?imu[imu.length-1].t/(imu.length-1):10;
   const mDt=mag.length>1?mag[mag.length-1].t/(mag.length-1):2;
 
-  // Release = first |gyro| > 10 rad/s
-  let relIdx=-1;
-  for(let i=10;i<imu.length;i++){
-    const g=Math.sqrt(imu[i].gx*imu[i].gx+imu[i].gy*imu[i].gy+imu[i].gz*imu[i].gz);
-    if(g>10){relIdx=i;break;}
-  }
-  if(relIdx<0){
-    let best=0;
-    for(let i=0;i<imu.length;i++){
-      const a=Math.sqrt(imu[i].ax*imu[i].ax+imu[i].ay*imu[i].ay+imu[i].az*imu[i].az);
-      if(a>best){best=a;relIdx=i;}
+  // ── Release / Landing from d(gz)/dt ──
+  // gz ramps up during wind-up, plateaus during flight (spin is stable),
+  // spikes again on impact. So:
+  //   release = first sample where |d(gz)/dt| drops below LOW after being above HIGH
+  //             (end of wind-up ramp = spin rate has plateaued)
+  //   landing = first sample where |d(gz)/dt| exceeds HIGH again after release
+  //             (impact breaks the plateau)
+  let relIdx=-1,landIdx=-1;
+  {
+    const N=imu.length;
+    // Smooth gz before differentiating so single-sample noise doesn't trigger.
+    const smW=Math.max(2,Math.floor(25/iDt));
+    const gzS=new Float64Array(N);
+    for(let i=0;i<N;i++){
+      const lo=Math.max(0,i-smW),hi=Math.min(N,i+smW+1);
+      let s=0;for(let j=lo;j<hi;j++)s+=imu[j].gz;
+      gzS[i]=s/(hi-lo);
     }
-    if(best<3*9.81)relIdx=0;
+    const dtSec=iDt/1000;
+    const dgz=new Float64Array(N);
+    for(let i=1;i<N-1;i++)dgz[i]=Math.abs((gzS[i+1]-gzS[i-1])/(2*dtSec));
+    // Fixed thresholds tuned to disc dynamics.
+    // Wind-up rate-of-change peaks around 50-200 rad/s², landing impacts 500+ rad/s².
+    const HIGH=60,LOW=20;
+    // Release = first sustained dip into LOW after having crossed HIGH
+    let wasHigh=false,lowRun=0;
+    const lowHoldN=Math.max(2,Math.floor(30/iDt)); // need 30ms of quiet to confirm plateau
+    for(let i=1;i<N-1;i++){
+      if(dgz[i]>HIGH){wasHigh=true;lowRun=0;}
+      else if(wasHigh&&dgz[i]<LOW){lowRun++;if(lowRun>=lowHoldN){relIdx=i-lowRun+1;break;}}
+      else lowRun=0;
+    }
+    // Landing = next sample where dgz crosses HIGH after release + min flight
+    if(relIdx>=0){
+      const minFlightN=Math.max(1,Math.floor(100/iDt));
+      for(let i=relIdx+minFlightN;i<N-1;i++){
+        if(dgz[i]>HIGH){landIdx=i;break;}
+      }
+    }
+    log('detect: relIdx='+relIdx+(relIdx>=0?'('+(relIdx*iDt).toFixed(0)+'ms)':'')
+        +' landIdx='+landIdx+(landIdx>=0?'('+(landIdx*iDt).toFixed(0)+'ms)':''));
   }
 
-  // Landing = first |a| > 4g after release + 300 ms
-  const skipFrom=relIdx+Math.max(1,Math.floor(300/iDt));
-  let landIdx=-1;
-  for(let i=skipFrom;i<imu.length;i++){
-    const a=Math.sqrt(imu[i].ax*imu[i].ax+imu[i].ay*imu[i].ay+imu[i].az*imu[i].az);
-    if(a>4*9.81){landIdx=i;break;}
+  // Fallback if the gz-derivative method didn't find a release
+  if(relIdx<0){
+    log('detect: gz method failed, fallback to gyro>10');
+    for(let i=10;i<imu.length;i++){
+      const g=Math.sqrt(imu[i].gx*imu[i].gx+imu[i].gy*imu[i].gy+imu[i].gz*imu[i].gz);
+      if(g>10){relIdx=i;break;}
+    }
+    if(relIdx<0){
+      let best=0;
+      for(let i=0;i<imu.length;i++){
+        const a=Math.sqrt(imu[i].ax*imu[i].ax+imu[i].ay*imu[i].ay+imu[i].az*imu[i].az);
+        if(a>best){best=a;relIdx=i;}
+      }
+      if(best<3*9.81)relIdx=0;
+    }
+  }
+
+  // Legacy landing fallback: first |a| > 4g after release + 300 ms
+  if(landIdx<0){
+    const skipFrom=relIdx+Math.max(1,Math.floor(300/iDt));
+    for(let i=skipFrom;i<imu.length;i++){
+      const a=Math.sqrt(imu[i].ax*imu[i].ax+imu[i].ay*imu[i].ay+imu[i].az*imu[i].az);
+      if(a>4*9.81){landIdx=i;break;}
+    }
   }
   if(landIdx<=relIdx)landIdx=-1;
 
@@ -748,7 +794,8 @@ function toggleTrail(){
 function updateDist(path){} // no-op (overlay handles it during animation)
 
 // ═════════ RAW SENSOR GRAPHS (right column) ═════════
-function drawGraph(canvasId,samples,axes,unit,releaseMs,landingMs){
+// All three graphs share `sharedMaxT` so mag/accel/gyro line up in time.
+function drawGraph(canvasId,samples,axes,unit,releaseMs,landingMs,sharedMaxT){
   const cv=$(canvasId);if(!cv)return;
   const dp=devicePixelRatio||1;
   cv.width=cv.clientWidth*dp;cv.height=cv.clientHeight*dp;
@@ -756,6 +803,7 @@ function drawGraph(canvasId,samples,axes,unit,releaseMs,landingMs){
   const W=cv.width,H=cv.height;
   cx.fillStyle='#0a0e14';cx.fillRect(0,0,W,H);
   if(!samples||samples.length<2)return;
+  const tMax=sharedMaxT||samples[samples.length-1].t||1;
   // Range
   let mn=Infinity,mx=-Infinity;
   for(const s of samples)for(const k of axes){const v=s[k];if(v<mn)mn=v;if(v>mx)mx=v;}
@@ -769,9 +817,8 @@ function drawGraph(canvasId,samples,axes,unit,releaseMs,landingMs){
     cx.strokeStyle='#334155';cx.setLineDash([3*dp,3*dp]);
     cx.beginPath();cx.moveTo(0,zy);cx.lineTo(W,zy);cx.stroke();cx.setLineDash([]);
   }
-  // Series
+  // Series (x = sample.t / sharedMaxT so the time axis lines up across graphs)
   const cols=['#ef4444','#22c55e','#3b82f6'];
-  const tMax=samples[samples.length-1].t||1;
   const step=Math.max(1,Math.floor(samples.length/(W/dp)));
   for(let a=0;a<axes.length;a++){
     cx.strokeStyle=cols[a];cx.lineWidth=1.2*dp;cx.beginPath();
@@ -801,9 +848,13 @@ function drawAllGraphs(t){
   if(!t){
     drawGraph('gMag',null);drawGraph('gAcc',null);drawGraph('gGyr',null);return;
   }
-  drawGraph('gMag',t.magSamples,['x','y','z'],'µT',t.releaseMs,t.landingMs);
-  drawGraph('gAcc',t.imuSamples,['ax','ay','az'],'m/s²',t.releaseMs,t.landingMs);
-  drawGraph('gGyr',t.imuSamples,['gx','gy','gz'],'rad/s',t.releaseMs,t.landingMs);
+  // Use the longer of the two series so nothing gets clipped and the axes line up.
+  const magMax=t.magSamples.length?t.magSamples[t.magSamples.length-1].t:0;
+  const imuMax=t.imuSamples.length?t.imuSamples[t.imuSamples.length-1].t:0;
+  const shared=Math.max(magMax,imuMax,1);
+  drawGraph('gMag',t.magSamples,['x','y','z'],'µT',t.releaseMs,t.landingMs,shared);
+  drawGraph('gAcc',t.imuSamples,['ax','ay','az'],'m/s²',t.releaseMs,t.landingMs,shared);
+  drawGraph('gGyr',t.imuSamples,['gx','gy','gz'],'rad/s',t.releaseMs,t.landingMs,shared);
 }
 
 // ═════════ HISTORY + SYNC ═════════
