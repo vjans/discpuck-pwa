@@ -144,6 +144,23 @@ dialog.detail::backdrop{background:rgba(0,0,0,.75);backdrop-filter:blur(3px)}
   font-weight:700;font-family:inherit}
 .row-del:hover{color:var(--rd);border-color:#7f1d1d;background:#2a1216}
 
+/* Annotation controls */
+.chip-btn.armed{background:var(--or);color:#000;border-color:var(--or);
+  animation:blink 1s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.55}}
+.ev-val{font-family:'SF Mono',ui-monospace,monospace;font-size:.78rem;font-weight:700;
+  color:var(--tx);min-width:60px;display:inline-block}
+.ev-val.empty{color:var(--mt);font-weight:500;font-style:italic}
+.plots canvas.armed{cursor:crosshair;border-color:var(--or);box-shadow:0 0 0 1px var(--or)}
+
+/* Row invalid state */
+tbody tr.invalid{opacity:.45}
+tbody tr.invalid .big-n{color:var(--mt)}
+
+.filters label.toggle{font-size:.75rem;color:var(--mt);display:inline-flex;align-items:center;
+  gap:.3rem;cursor:pointer;user-select:none}
+.filters label.toggle input{margin:0}
+
 @media(max-width:700px){
   body{padding:.4rem;font-size:13px}
   .hdr h1{font-size:1.1rem}
@@ -176,6 +193,7 @@ dialog.detail::backdrop{background:rgba(0,0,0,.75);backdrop-filter:blur(3px)}
     <option value="Roller">Roller</option><option value="Thumber">Thumber</option>
     <option value="__unlabeled">Unlabeled</option>
   </select>
+  <label class="toggle"><input type="checkbox" id="fValidOnly" checked>Valid only</label>
   <button class="reset" onclick="resetFilters()">Reset</button>
   <span class="count" id="count">—</span>
 </div>
@@ -208,12 +226,15 @@ const SUMMARY_COLS=[
   'hyzer_deg','nose_deg','throw_type','effort','notes',
   'mag_rate_hz','imu_rate_hz','duration_s',
   'speed_accel_ms','speed_giljarhus_ms','wobble_deg','wobble_trend',
-  'launch_angle_deg','advance_ratio','gyro_rpm'
+  'launch_angle_deg','advance_ratio','gyro_rpm',
+  'release_s','landing_s','valid'
 ].join(',');
 
 let allThrows=[];
 let sortKey='created_at',sortDir='desc';
-const filters={search:'',collector:'',disc:'',type:''};
+const filters={search:'',collector:'',disc:'',type:'',validOnly:true};
+// Per-dialog annotation state
+let detailCtx=null; // {t, raw, dur_s, imu_hz_eff, armed: 'release_s'|'landing_s'|null}
 
 // ═══════════ FETCH ═══════════
 async function fetchAll(){
@@ -251,6 +272,7 @@ function wireEvents(){
   document.getElementById('fCollector').addEventListener('change',e=>{filters.collector=e.target.value;render();});
   document.getElementById('fDisc').addEventListener('change',e=>{filters.disc=e.target.value;render();});
   document.getElementById('fType').addEventListener('change',e=>{filters.type=e.target.value;render();});
+  document.getElementById('fValidOnly').addEventListener('change',e=>{filters.validOnly=e.target.checked;render();});
   document.getElementById('detail').addEventListener('close',()=>{history.replaceState(null,'',location.pathname);});
   // Open detail if URL has ?throw=<id>
   const h=new URLSearchParams(location.search).get('throw');
@@ -258,11 +280,12 @@ function wireEvents(){
 }
 
 function resetFilters(){
-  filters.search='';filters.collector='';filters.disc='';filters.type='';
+  filters.search='';filters.collector='';filters.disc='';filters.type='';filters.validOnly=true;
   document.getElementById('fSearch').value='';
   document.getElementById('fCollector').value='';
   document.getElementById('fDisc').value='';
   document.getElementById('fType').value='';
+  document.getElementById('fValidOnly').checked=true;
   render();
 }
 
@@ -329,6 +352,7 @@ const COLS=[
 function visible(){
   const s=filters.search;
   return allThrows.filter(t=>{
+    if(filters.validOnly&&t.valid===false)return false;
     if(filters.collector&&t.collector!==filters.collector)return false;
     if(filters.disc&&t.disc!==filters.disc)return false;
     if(filters.type==='__unlabeled'){if(t.throw_type)return false;}
@@ -365,7 +389,8 @@ function render(){
       const v=t[c.k];
       return `<td class="${c.cls||''} ${c.colHide||''}">${c.fmt(v)}</td>`;
     }).join('');
-    return `<tr data-id="${t.id}">${tds}<td><button class="row-del" data-id="${t.id}" title="Delete throw">&times;</button></td></tr>`;
+    const cls=t.valid===false?'invalid':'';
+    return `<tr data-id="${t.id}" class="${cls}">${tds}<td><button class="row-del" data-id="${t.id}" title="Delete throw">&times;</button></td></tr>`;
   }).join('');
   document.getElementById('tblWrap').innerHTML=`<table>
     <thead><tr>${thead}</tr></thead>
@@ -418,9 +443,10 @@ async function openDetail(id){
   try{
     const raw=await fetchRaw(id);
     body.innerHTML=renderDetailHtml(t,raw,false);
-    if(raw.raw_mag)drawSeries('plotMag',raw.raw_mag,t.mag_rate_hz,['Mx','My','Mz'],'µT');
-    if(raw.raw_imu)drawSeries('plotAcc',raw.raw_imu,t.imu_rate_hz,['Ax','Ay','Az'],'m/s²',[0,1,2]);
-    if(raw.raw_imu)drawSeries('plotGyr',raw.raw_imu,t.imu_rate_hz,['Gx','Gy','Gz'],'rad/s',[3,4,5]);
+    const dur_s=(t.mag_rate_hz&&raw.raw_mag)?raw.raw_mag.length/t.mag_rate_hz:0;
+    const imu_hz_eff=(dur_s&&raw.raw_imu)?raw.raw_imu.length/dur_s:(t.imu_rate_hz||500);
+    detailCtx={t,raw,dur_s,imu_hz_eff,armed:null};
+    drawAllPlots();
     wireDetailActions(t,raw);
   }catch(e){
     body.innerHTML=renderDetailHtml(t,null,false)+
@@ -428,7 +454,16 @@ async function openDetail(id){
     wireDetailActions(t,null);
   }
 }
-function closeDetail(){document.getElementById('detail').close();}
+function closeDetail(){detailCtx=null;document.getElementById('detail').close();}
+
+function drawAllPlots(){
+  if(!detailCtx)return;
+  const {t,raw,dur_s,imu_hz_eff}=detailCtx;
+  const markers={release_s:t.release_s,landing_s:t.landing_s};
+  if(raw.raw_mag)drawSeries('plotMag',raw.raw_mag,t.mag_rate_hz||100,['Mx','My','Mz'],'µT',null,dur_s,markers);
+  if(raw.raw_imu)drawSeries('plotAcc',raw.raw_imu,imu_hz_eff,['Ax','Ay','Az'],'m/s²',[0,1,2],dur_s,markers);
+  if(raw.raw_imu)drawSeries('plotGyr',raw.raw_imu,imu_hz_eff,['Gx','Gy','Gz'],'rad/s',[3,4,5],dur_s,markers);
+}
 
 function renderDetailHtml(t,raw,loading){
   const gi=(l,v,cls='')=>`<div class="gi"><div class="l">${l}</div><div class="v ${cls}">${v}</div></div>`;
@@ -443,6 +478,9 @@ function renderDetailHtml(t,raw,loading){
   const effortChips=['25%','50%','75%','100%'].map(v=>
     `<button type="button" class="chip-btn ${t.effort===v?'on':''}" data-field="effort" data-value="${v}">${v}</button>`
   ).join('');
+  const isValid=t.valid!==false; // null → valid
+  const evVal=(v,cls='')=>v==null?`<span class="ev-val empty ${cls}">unset</span>`
+    :`<span class="ev-val ${cls}">${(+v).toFixed(3)} s</span>`;
   return `
     <div class="section-h">Context</div>
     <div class="grid">
@@ -453,12 +491,29 @@ function renderDetailHtml(t,raw,loading){
 
     <div class="section-h">Labels <span class="save-status" id="saveStatus"></span></div>
     <div class="label-editor">
+      <div class="lbl-row"><span class="lbl-l">Valid</span>
+        <button type="button" class="chip-btn ${isValid?'on':''}" data-field="valid" data-value="bool">${isValid?'Valid':'Invalid'}</button>
+      </div>
       <div class="lbl-row"><span class="lbl-l">Type</span>${typeChips}</div>
       <div class="lbl-row"><span class="lbl-l">Effort</span>${effortChips}</div>
       <div class="lbl-row"><span class="lbl-l">Notes</span>
         <input type="text" id="notesInput" value="${escapeHtml(t.notes||'')}" placeholder="e.g. dropped, wind gust, practice throw">
       </div>
       <div style="font-size:.65rem;color:var(--mt);font-style:italic">Click an active chip to clear it. Notes save on blur or Enter.</div>
+    </div>
+
+    <div class="section-h">Events (click a plot after arming)</div>
+    <div class="label-editor">
+      <div class="lbl-row"><span class="lbl-l">Release</span>
+        ${evVal(t.release_s)}
+        <button type="button" class="chip-btn" data-arm="release_s" id="armRelease">Set release</button>
+        ${t.release_s!=null?'<button type="button" class="chip-btn" data-clear="release_s">Clear</button>':''}
+      </div>
+      <div class="lbl-row"><span class="lbl-l">Landing</span>
+        ${evVal(t.landing_s)}
+        <button type="button" class="chip-btn" data-arm="landing_s" id="armLanding">Set landing</button>
+        ${t.landing_s!=null?'<button type="button" class="chip-btn" data-clear="landing_s">Clear</button>':''}
+      </div>
     </div>
 
     <div class="section-h">Flight Metrics</div>
@@ -552,17 +607,36 @@ function wireDetailActions(t,raw){
   }
 
   // Label chips — click active chip to clear, otherwise set
-  document.querySelectorAll('.label-editor .chip-btn').forEach(btn=>{
+  document.querySelectorAll('.label-editor .chip-btn[data-field]').forEach(btn=>{
     btn.addEventListener('click',async()=>{
       const field=btn.dataset.field;
       const chipValue=btn.dataset.value;
+      if(chipValue==='bool'){
+        // Valid toggle: null/true → false, false → true
+        const newValue=(t.valid===false)?true:false;
+        btn.classList.toggle('on',newValue);
+        btn.textContent=newValue?'Valid':'Invalid';
+        await saveField(t,'valid',newValue);
+        return;
+      }
       const newValue=t[field]===chipValue?null:chipValue;
-      // Update UI state immediately
       document.querySelectorAll(`.label-editor [data-field="${field}"]`).forEach(b=>{
         b.classList.toggle('on',b.dataset.value===(newValue||''));
       });
       await saveField(t,field,newValue);
     });
+  });
+
+  // Event arm buttons + canvas clicks + clear buttons
+  document.querySelectorAll('[data-arm]').forEach(btn=>{
+    btn.addEventListener('click',()=>armEvent(btn.dataset.arm));
+  });
+  document.querySelectorAll('[data-clear]').forEach(btn=>{
+    btn.addEventListener('click',()=>clearEvent(btn.dataset.clear));
+  });
+  ['plotMag','plotAcc','plotGyr'].forEach(id=>{
+    const cv=document.getElementById(id);if(!cv)return;
+    cv.addEventListener('click',onPlotClick);
   });
 
   // Notes input — save on change (blur) and on Enter
@@ -643,7 +717,10 @@ async function saveField(t,field,value){
     showSave('saved');
     // Re-render table & stats so chip/filter/sort reflect new state
     render();
-    // Labels don't affect the stats strip, skip that
+    // Redraw plots if a timed-event label changed
+    if((field==='release_s'||field==='landing_s')&&detailCtx)drawAllPlots();
+    // Refresh the Events section values + Clear buttons inline without losing plot state
+    if(field==='release_s'||field==='landing_s')refreshEventsUi();
   }catch(e){
     t[field]=prev;
     if(idx>=0)allThrows[idx][field]=prev;
@@ -656,8 +733,69 @@ async function saveField(t,field,value){
       });
     }else if(field==='notes'){
       const n=document.getElementById('notesInput');if(n)n.value=prev||'';
+    }else if(field==='release_s'||field==='landing_s'){
+      refreshEventsUi();
+      if(detailCtx)drawAllPlots();
     }
   }
+}
+
+function refreshEventsUi(){
+  if(!detailCtx)return;
+  const t=detailCtx.t;
+  document.querySelectorAll('.label-editor .lbl-row').forEach(row=>{
+    const armBtn=row.querySelector('[data-arm]');
+    if(!armBtn)return;
+    const field=armBtn.dataset.arm;
+    const val=t[field];
+    const valEl=row.querySelector('.ev-val');
+    if(valEl){
+      if(val==null){valEl.textContent='unset';valEl.className='ev-val empty';}
+      else{valEl.textContent=(+val).toFixed(3)+' s';valEl.className='ev-val';}
+    }
+    const existingClear=row.querySelector('[data-clear]');
+    if(val!=null&&!existingClear){
+      const b=document.createElement('button');
+      b.type='button';b.className='chip-btn';b.dataset.clear=field;b.textContent='Clear';
+      b.addEventListener('click',()=>clearEvent(field));
+      armBtn.insertAdjacentElement('afterend',b);
+    }else if(val==null&&existingClear){
+      existingClear.remove();
+    }
+  });
+}
+
+function armEvent(field){
+  if(!detailCtx)return;
+  const same=detailCtx.armed===field;
+  detailCtx.armed=same?null:field;
+  updateArmUi();
+}
+function clearEvent(field){
+  if(!detailCtx)return;
+  saveField(detailCtx.t,field,null);
+}
+function updateArmUi(){
+  const armed=detailCtx?.armed;
+  document.querySelectorAll('[data-arm]').forEach(b=>{
+    const on=armed===b.dataset.arm;
+    b.classList.toggle('armed',on);
+    b.textContent=on?('Click plot to set '+(b.dataset.arm==='release_s'?'release':'landing')):
+      ('Set '+(b.dataset.arm==='release_s'?'release':'landing'));
+  });
+  ['plotMag','plotAcc','plotGyr'].forEach(id=>{
+    const cv=document.getElementById(id);if(cv)cv.classList.toggle('armed',!!armed);
+  });
+}
+function onPlotClick(e){
+  if(!detailCtx||!detailCtx.armed)return;
+  const cv=e.currentTarget;
+  const rect=cv.getBoundingClientRect();
+  const x=e.clientX-rect.left;
+  const t_s=+((x/rect.width)*detailCtx.dur_s).toFixed(3);
+  const field=detailCtx.armed;
+  detailCtx.armed=null;updateArmUi();
+  saveField(detailCtx.t,field,t_s);
 }
 
 // ═══════════ DOWNLOADS ═══════════
@@ -691,7 +829,9 @@ function downloadRawCsv(t,raw,which){
 }
 
 // ═══════════ PLOT ═══════════
-function drawSeries(canvasId,samples,hz,labels,unit,idx){
+// xMax_s: shared x-axis max so mag/accel/gyro share a real-time axis.
+// markers: {release_s, landing_s} → vertical lines on the plot.
+function drawSeries(canvasId,samples,hz,labels,unit,idx,xMax_s,markers){
   const cv=document.getElementById(canvasId);if(!cv||!samples||samples.length<2)return;
   const dp=devicePixelRatio||1;
   cv.width=cv.clientWidth*dp;cv.height=cv.clientHeight*dp;
@@ -699,6 +839,8 @@ function drawSeries(canvasId,samples,hz,labels,unit,idx){
   const W=cv.width,H=cv.height;
   const N=samples.length;
   const accessor=idx||[0,1,2];
+  const ownDur=N/(hz||1);
+  const xMax=xMax_s||ownDur;
   // Range
   let mn=Infinity,mx=-Infinity;
   for(let i=0;i<N;i++){for(const a of accessor){const v=+samples[i][a];if(v<mn)mn=v;if(v>mx)mx=v;}}
@@ -712,25 +854,38 @@ function drawSeries(canvasId,samples,hz,labels,unit,idx){
     const zy=H-((0-mn)/(mx-mn))*H;cx.strokeStyle='#334155';cx.setLineDash([3*dp,3*dp]);
     cx.beginPath();cx.moveTo(0,zy);cx.lineTo(W,zy);cx.stroke();cx.setLineDash([]);
   }
-  // Series
+  // Series (time-based x so mag/accel/gyro share axis)
   const cols=['#ef4444','#22c55e','#3b82f6'];
   const step=Math.max(1,Math.floor(N/(W/dp)));
   for(let a=0;a<3;a++){
     cx.strokeStyle=cols[a];cx.lineWidth=1.2*dp;cx.beginPath();
     for(let i=0;i<N;i+=step){
       const v=+samples[i][accessor[a]];
-      const x=i/(N-1)*W;
+      const t=i/hz;
+      const x=(t/xMax)*W;
       const y=H-((v-mn)/(mx-mn))*H;
       i===0?cx.moveTo(x,y):cx.lineTo(x,y);
     }
     cx.stroke();
   }
+  // Event markers
+  if(markers){
+    const drawMarker=(t_s,color,label)=>{
+      if(t_s==null)return;
+      const x=(t_s/xMax)*W;
+      cx.strokeStyle=color;cx.lineWidth=1.3*dp;cx.setLineDash([5*dp,4*dp]);
+      cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,H);cx.stroke();cx.setLineDash([]);
+      cx.fillStyle=color;cx.font=`bold ${10*dp}px ui-monospace,monospace`;
+      cx.fillText(label,x+3*dp,12*dp);
+    };
+    drawMarker(markers.release_s,'#f59e0b','R');
+    drawMarker(markers.landing_s,'#ef4444','L');
+  }
   // Axis labels (range + duration)
   cx.fillStyle='#64748b';cx.font=`${9*dp}px ui-monospace,monospace`;
   cx.fillText(mx.toFixed(1)+' '+unit,4*dp,10*dp);
   cx.fillText(mn.toFixed(1)+' '+unit,4*dp,H-3*dp);
-  const durS=N/(hz||1);
-  cx.textAlign='right';cx.fillText(durS.toFixed(2)+' s',W-4*dp,H-3*dp);
+  cx.textAlign='right';cx.fillText(xMax.toFixed(2)+' s',W-4*dp,H-3*dp);
   cx.textAlign='left';
 }
 
